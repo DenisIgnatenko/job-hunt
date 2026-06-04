@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { fetchVacancies, type Vacancy } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
 
-const STATUSES = ['all', 'new', 'in_progress', 'letter_sent', 'applied', 'interview', 'offer', 'rejected']
+const STATUSES = ['all', 'new', 'in_progress', 'applied', 'interview', 'offer', 'rejected']
 
 export default function VacanciesPage() {
   const [vacancies, setVacancies] = useState<Vacancy[]>([])

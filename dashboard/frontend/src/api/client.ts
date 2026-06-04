@@ -115,5 +115,17 @@ export const fetchVacancies = (params?: { status?: string; platform?: string }) 
 export const fetchVacancy = (id: number) =>
   api.get<VacancyDetail>(`/vacancies/${id}`).then(r => r.data)
 
+export const updateVacancyStatus = (id: number, status: string) =>
+  api.patch(`/vacancies/${id}/status`, { status }).then(r => r.data)
+
+export const generateLetter = (id: number) =>
+  api.post<{ body: string }>(`/vacancies/${id}/generate-letter`).then(r => r.data)
+
+export const fetchCompanyReport = (id: number) =>
+  api.post<{ report: string }>(`/vacancies/${id}/company-report`).then(r => r.data)
+
+export const fetchMatchAnalysis = (id: number) =>
+  api.post<{ analysis: string }>(`/vacancies/${id}/match-analysis`).then(r => r.data)
+
 export const fetchEvents = (params?: { status?: string }) =>
   api.get<Event[]>('/events', { params }).then(r => r.data)

@@ -1,8 +1,19 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from dashboard.api.auth import require_auth
 from dashboard.api.models import VacancyDetailOut, VacancyOut, CoverLetterOut
 from src.database.repository import CoverLetterRepository, VacancyRepository
+
+_VALID_STATUSES = {
+    "new", "in_progress", "letter_sent", "applied",
+    "interview", "offer", "rejected", "rejected_by_company",
+}
+
+class StatusUpdate(BaseModel):
+    status: str
 
 router = APIRouter(prefix="/api/vacancies", tags=["vacancies"])
 
@@ -18,7 +29,9 @@ def list_vacancies(
     _: str = Depends(require_auth),
 ) -> list[VacancyOut]:
     if status:
-        vacancies = _vacancy_repo.get_all_by_statuses([status])
+        # in_progress визуально объединяет letter_sent — пользователь не видит разницы
+        statuses = ["in_progress", "letter_sent"] if status == "in_progress" else [status]
+        vacancies = _vacancy_repo.get_all_by_statuses(statuses)
     else:
         vacancies = _vacancy_repo.get_all_by_statuses([
             "new", "in_progress", "letter_sent", "applied",
@@ -83,3 +96,61 @@ def get_vacancy(
             if l.id is not None
         ],
     )
+
+
+@router.patch("/{vacancy_id}/status")
+def update_status(
+    vacancy_id: int,
+    body: StatusUpdate,
+    _: str = Depends(require_auth),
+) -> dict:
+    if body.status not in _VALID_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {body.status}")
+    if not _vacancy_repo.get_by_id(vacancy_id):
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+    _vacancy_repo.update_status(vacancy_id, body.status)
+    return {"ok": True}
+
+
+@router.post("/{vacancy_id}/generate-letter")
+async def generate_letter(
+    vacancy_id: int,
+    _: str = Depends(require_auth),
+) -> dict:
+    """
+    Запускает research + letter pipeline в отдельном потоке.
+    Блокирует запрос на 15-30 секунд — frontend показывает loading.
+    """
+    from dashboard.api.pipeline import run_research_pipeline
+
+    if not _vacancy_repo.get_by_id(vacancy_id):
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    body = await asyncio.to_thread(run_research_pipeline, vacancy_id)
+    return {"body": body}
+
+
+@router.post("/{vacancy_id}/company-report")
+async def company_report(
+    vacancy_id: int,
+    _: str = Depends(require_auth),
+) -> dict:
+    """Генерирует AI отчёт о компании для кандидата."""
+    from dashboard.api.pipeline import generate_company_report
+    if not _vacancy_repo.get_by_id(vacancy_id):
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+    report = await asyncio.to_thread(generate_company_report, vacancy_id)
+    return {"report": report}
+
+
+@router.post("/{vacancy_id}/match-analysis")
+async def match_analysis(
+    vacancy_id: int,
+    _: str = Depends(require_auth),
+) -> dict:
+    """AI анализ совпадения вакансии с резюме Denis."""
+    from dashboard.api.pipeline import generate_match_analysis
+    if not _vacancy_repo.get_by_id(vacancy_id):
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+    analysis = await asyncio.to_thread(generate_match_analysis, vacancy_id)
+    return {"analysis": analysis}

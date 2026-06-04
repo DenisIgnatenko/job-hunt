@@ -2,14 +2,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchStats, type Stats } from '../api/client'
 
-const PIPELINE = ['new', 'in_progress', 'letter_sent', 'applied', 'interview', 'offer']
+const PIPELINE = ['new', 'in_progress', 'applied', 'interview', 'offer']
 const PIPELINE_LABELS: Record<string, string> = {
-  new:          '🔍 New',
-  in_progress:  '⚙️ In progress',
-  letter_sent:  '✉️ Letter sent',
-  applied:      '📤 Applied',
-  interview:    '🎙️ Interview',
-  offer:        '🎉 Offer',
+  new:         '🔍 New',
+  in_progress: '⚙️ In progress',
+  applied:     '📤 Applied',
+  interview:   '🎙️ Interview',
+  offer:       '🎉 Offer',
 }
 
 export default function DashboardPage() {
@@ -41,7 +40,12 @@ export default function DashboardPage() {
               className="pipeline-card"
               onClick={() => nav(`/vacancies?status=${status}`)}
             >
-              <div className="pipeline-count">{stats.vacancies[status] ?? 0}</div>
+              <div className="pipeline-count">
+                {/* in_progress визуально включает letter_sent */}
+                {status === 'in_progress'
+                  ? (stats.vacancies['in_progress'] ?? 0) + (stats.vacancies['letter_sent'] ?? 0)
+                  : (stats.vacancies[status] ?? 0)}
+              </div>
               <div className="pipeline-label">{PIPELINE_LABELS[status]}</div>
             </div>
           ))}
