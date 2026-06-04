@@ -6,6 +6,7 @@ import asyncio
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from src.bot.telegram_bot import build_app
 from src.config import config
@@ -32,52 +33,56 @@ async def main() -> None:
     app = build_app()
     await app.initialize()
 
-    scheduler = AsyncIOScheduler()
+    # Все scrapers запускаются ночью по UTC, чтобы к 8:00 CEST (= 6:00 UTC)
+    # подборка была готова. Расписание разнесено чтобы не нагружать API одновременно.
+    #
+    # UTC → CEST (лето, UTC+2):
+    #   04:00 UTC = 06:00 CEST  Jobindex
+    #   04:10 UTC = 06:10 CEST  Remotive
+    #   04:20 UTC = 06:20 CEST  The Hub
+    #   04:35 UTC = 06:35 CEST  LinkedIn  (медленный — куки, get_job())
+    #   05:10 UTC = 07:10 CEST  Events    (Eventbrite + DuckDuckGo + LLM)
+    scheduler = AsyncIOScheduler(timezone="UTC")
+
     scheduler.add_job(
         job_scout_jobindex,
-        trigger="interval",
-        hours=config.scout_interval_hours,
+        trigger=CronTrigger(hour=4, minute=0),
         args=[app],
         id="scout_jobindex",
         replace_existing=True,
     )
     scheduler.add_job(
-        job_scout_linkedin,
-        trigger="interval",
-        hours=config.linkedin_interval_hours,
-        args=[app],
-        id="scout_linkedin",
-        replace_existing=True,
-    )
-    scheduler.add_job(
         job_scout_remotive,
-        trigger="interval",
-        hours=config.scout_interval_hours,
+        trigger=CronTrigger(hour=4, minute=10),
         args=[app],
         id="scout_remotive",
         replace_existing=True,
     )
     scheduler.add_job(
         job_scout_thehub,
-        trigger="interval",
-        hours=config.scout_interval_hours,
+        trigger=CronTrigger(hour=4, minute=20),
         args=[app],
         id="scout_thehub",
         replace_existing=True,
     )
     scheduler.add_job(
+        job_scout_linkedin,
+        trigger=CronTrigger(hour=4, minute=35),
+        args=[app],
+        id="scout_linkedin",
+        replace_existing=True,
+    )
+    scheduler.add_job(
         job_scout_events,
-        trigger="interval",
-        hours=24,
+        trigger=CronTrigger(hour=5, minute=10),
         args=[app],
         id="scout_events",
         replace_existing=True,
     )
     scheduler.start()
     log.info(
-        "Scheduler started (Jobindex/Remotive/TheHub every %dh, LinkedIn every %dh, Events daily)",
-        config.scout_interval_hours,
-        config.linkedin_interval_hours,
+        "Scheduler started — daily at 04:00-05:10 UTC (06:00-07:10 CEST). "
+        "Results ready by 08:00 local time."
     )
 
     if app.updater is None:
