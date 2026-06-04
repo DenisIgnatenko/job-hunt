@@ -84,6 +84,8 @@ def get_vacancy(
         posted_at=v.posted_at,
         fetched_at=v.fetched_at,
         description=v.description,
+        company_report=v.company_report,
+        match_analysis=v.match_analysis,
         cover_letters=[
             CoverLetterOut(
                 id=l.id,  # type: ignore[arg-type]

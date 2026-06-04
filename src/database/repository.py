@@ -28,6 +28,8 @@ class Vacancy:
     id: Optional[int] = None
     fetched_at: Optional[str] = None
     telegram_message_id: Optional[int] = None
+    company_report: Optional[str] = None   # AI отчёт о компании (кэш)
+    match_analysis: Optional[str] = None   # AI анализ совпадения с резюме (кэш)
 
 
 @dataclass
@@ -135,6 +137,24 @@ class VacancyRepository:
         with get_connection() as conn:
             conn.execute(
                 "UPDATE vacancies SET status = ? WHERE id = ?", (status, vacancy_id)
+            )
+            conn.commit()
+
+    def save_company_report(self, vacancy_id: int, report: str) -> None:
+        """Сохраняет AI отчёт о компании — вызывается из dashboard pipeline."""
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE vacancies SET company_report = ? WHERE id = ?",
+                (report, vacancy_id),
+            )
+            conn.commit()
+
+    def save_match_analysis(self, vacancy_id: int, analysis: str) -> None:
+        """Сохраняет AI анализ совпадения с резюме — вызывается из dashboard pipeline."""
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE vacancies SET match_analysis = ? WHERE id = ?",
+                (analysis, vacancy_id),
             )
             conn.commit()
 

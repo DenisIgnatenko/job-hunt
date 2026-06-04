@@ -121,6 +121,15 @@ CREATE TABLE IF NOT EXISTS community_events (
 );
 """
 
+# V9/V10 — AI reports кэшируются в БД чтобы не тратить токены при повторном открытии.
+# conn.execute() принимает только одно выражение — два ALTER = два migration.
+_V9_ADD_COMPANY_REPORT = """
+ALTER TABLE vacancies ADD COLUMN company_report TEXT;
+"""
+_V10_ADD_MATCH_ANALYSIS = """
+ALTER TABLE vacancies ADD COLUMN match_analysis TEXT;
+"""
+
 # Versioned migration list.
 # OCP: add new migrations at the end — never modify existing entries.
 # Each tuple: (version: int, sql: str)
@@ -133,6 +142,8 @@ _MIGRATIONS: list[tuple[int, str]] = [
     (6, _V6_ADD_WORK_FORMAT),
     (7, _V7_ADD_CITY),
     (8, _V8_COMMUNITY_EVENTS),
+    (9, _V9_ADD_COMPANY_REPORT),
+    (10, _V10_ADD_MATCH_ANALYSIS),
 ]
 
 

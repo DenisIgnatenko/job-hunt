@@ -156,19 +156,23 @@ _match_agent = _MatchAnalysisAgent()
 
 
 def generate_company_report(vacancy_id: int) -> str:
-    """Blocking: web research + AI company dossier for candidate decision-making."""
+    """Blocking: web research + AI company dossier. Сохраняет в БД для кэша."""
     vacancy = _vacancy_repo.get_by_id(vacancy_id)
     if not vacancy:
         raise ValueError(f"Vacancy {vacancy_id} not found")
     company_name = vacancy.company or "Unknown company"
     log.info("Company report started: %s", company_name)
-    return _company_report_agent.run(company_name, vacancy.description or "")
+    report = _company_report_agent.run(company_name, vacancy.description or "")
+    _vacancy_repo.save_company_report(vacancy_id, report)
+    return report
 
 
 def generate_match_analysis(vacancy_id: int) -> str:
-    """Blocking: compares vacancy with Denis's resume, returns honest fit assessment."""
+    """Blocking: compares vacancy with Denis's resume. Сохраняет в БД для кэша."""
     vacancy = _vacancy_repo.get_by_id(vacancy_id)
     if not vacancy:
         raise ValueError(f"Vacancy {vacancy_id} not found")
     log.info("Match analysis started for vacancy_id=%d", vacancy_id)
-    return _match_agent.run(vacancy.title, vacancy.description or "")
+    analysis = _match_agent.run(vacancy.title, vacancy.description or "")
+    _vacancy_repo.save_match_analysis(vacancy_id, analysis)
+    return analysis

@@ -54,7 +54,13 @@ export default function VacancyDetailPage() {
 
   useEffect(() => {
     if (!id) return
-    fetchVacancy(Number(id)).then(v => { setVacancy(v); setLoading(false) })
+    fetchVacancy(Number(id)).then(v => {
+      setVacancy(v)
+      // Загружаем кэшированные отчёты из БД — не нужно генерировать заново
+      setCompanyReport(v.company_report)
+      setMatchAnalysis(v.match_analysis)
+      setLoading(false)
+    })
   }, [id])
 
   const handleAction = async (nextStatus: string) => {

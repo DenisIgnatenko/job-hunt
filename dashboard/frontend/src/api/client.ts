@@ -69,6 +69,8 @@ export interface CoverLetter {
 export interface VacancyDetail extends Vacancy {
   description: string | null
   cover_letters: CoverLetter[]
+  company_report: string | null
+  match_analysis: string | null
 }
 
 export interface Event {

@@ -30,6 +30,8 @@ class CoverLetterOut(BaseModel):
 class VacancyDetailOut(VacancyOut):
     description: str | None
     cover_letters: list[CoverLetterOut] = []
+    company_report: str | None = None
+    match_analysis: str | None = None
 
 
 class EventOut(BaseModel):
