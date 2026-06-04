@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 
 // Credentials хранятся в sessionStorage — сбрасываются при закрытии браузера
 const getCredentials = () => ({
@@ -93,6 +93,19 @@ export interface Stats {
 }
 
 // --- API calls ---
+
+// Проверка credentials при логине — через чистый axios без interceptors,
+// чтобы 401 не вызвал reload страницы до того как catch покажет ошибку.
+export const verifyCredentials = async (username: string, password: string): Promise<boolean> => {
+  try {
+    await axios.get('/api/stats', { auth: { username, password } })
+    return true
+  } catch (err) {
+    const e = err as AxiosError
+    if (e.response?.status === 401) return false
+    throw err  // сетевая ошибка — пробрасываем
+  }
+}
 
 export const fetchStats = () => api.get<Stats>('/stats').then(r => r.data)
 

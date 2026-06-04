@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { hasCredentials, setCredentials } from './api/client'
+import { clearCredentials, hasCredentials, setCredentials, verifyCredentials } from './api/client'
 import Navbar from './components/Navbar'
 import DashboardPage from './pages/DashboardPage'
 import EventsPage from './pages/EventsPage'
@@ -11,12 +11,26 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [user, setUser] = useState('')
   const [pass, setPass] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user || !pass) { setError('Fill in both fields'); return }
-    setCredentials(user, pass)
-    onLogin()
+    setLoading(true)
+    setError('')
+    try {
+      const ok = await verifyCredentials(user, pass)
+      if (ok) {
+        setCredentials(user, pass)
+        onLogin()
+      } else {
+        setError('Invalid username or password')
+      }
+    } catch {
+      setError('Cannot connect to server')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -33,7 +47,9 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
           type="password" placeholder="Password" value={pass}
           onChange={e => setPass(e.target.value)}
         />
-        <button type="submit">Sign in</button>
+        <button type="submit" disabled={loading}>
+          {loading ? 'Checking…' : 'Sign in'}
+        </button>
       </form>
     </div>
   )
