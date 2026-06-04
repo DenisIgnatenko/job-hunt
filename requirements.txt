@@ -1,0 +1,7 @@
+anthropic>=0.40.0
+python-telegram-bot>=21.0
+apscheduler>=3.10.4
+requests>=2.32.0
+python-dotenv>=1.0.0
+linkedin-api>=2.3.1
+duckduckgo-search>=8.0.0

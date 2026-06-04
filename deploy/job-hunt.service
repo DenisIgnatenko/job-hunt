@@ -1,0 +1,22 @@
+[Unit]
+Description=Job Hunt Bot — автоматизация поиска работы
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__APP_DIR__
+ExecStart=__APP_DIR__/.venv/bin/python main.py
+EnvironmentFile=__APP_DIR__/.env
+
+# Перезапускать всегда при падении, ждать 15 сек между попытками
+Restart=always
+RestartSec=15
+
+# Логировать stdout/stderr через journald (просмотр: journalctl -u job-hunt -f)
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
