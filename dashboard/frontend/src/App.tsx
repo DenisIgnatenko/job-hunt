@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { clearCredentials, hasCredentials, setCredentials, verifyCredentials } from './api/client'
+import { hasCredentials, setCredentials, verifyCredentials } from './api/client'
 import Navbar from './components/Navbar'
 import DashboardPage from './pages/DashboardPage'
 import EventsPage from './pages/EventsPage'
