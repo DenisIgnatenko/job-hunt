@@ -1,0 +1,18 @@
+[Unit]
+Description=Job Hunt Dashboard — FastAPI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__APP_DIR__
+ExecStart=__APP_DIR__/.venv/bin/uvicorn dashboard.api.main:app --host 0.0.0.0 --port 8080
+EnvironmentFile=__APP_DIR__/.env
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

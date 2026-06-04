@@ -42,6 +42,10 @@ class Config:
     linkedin_jsessionid: str     # JSESSIONID cookie — required alongside li_at
     linkedin_interval_hours: int
 
+    # Dashboard — HTTP Basic Auth
+    dashboard_user: str
+    dashboard_password: str
+
     # Resume — loaded once at startup, injected into all agents
     resume_text: str
 
@@ -75,6 +79,8 @@ class Config:
             linkedin_cookie=os.getenv("LINKEDIN_COOKIE", ""),
             linkedin_jsessionid=os.getenv("LINKEDIN_JSESSIONID", ""),
             linkedin_interval_hours=int(os.getenv("LINKEDIN_INTERVAL_HOURS", "12")),
+            dashboard_user=os.getenv("DASHBOARD_USER", "denis"),
+            dashboard_password=os.getenv("DASHBOARD_PASSWORD", "changeme"),
             resume_text=_load_resume(),
         )
 
