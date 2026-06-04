@@ -98,11 +98,15 @@ class _CompanyReportAgent(BaseAgent):
         ]
         snippets: list[str] = []
         try:
-            with DDGS() as ddgs:
+            with DDGS(timeout=8) as ddgs:
                 for q in queries:
-                    for r in ddgs.text(q, max_results=4):
-                        body = r.get("body", "")[:300]
-                        snippets.append(f"[{r.get('title','')}] {body}")
+                    try:
+                        for r in ddgs.text(q, max_results=4):
+                            body = r.get("body", "")[:300]
+                            snippets.append(f"[{r.get('title','')}] {body}")
+                    except Exception:
+                        log.warning("Company report: query failed: '%s'", q)
+                        continue
         except Exception:
             log.warning("Company report: web search failed for '%s'", company_name)
         return "\n\n".join(snippets) if snippets else "No web results found."

@@ -15,6 +15,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from dashboard.api.routers import events, stats, vacancies
+from src.database.schema import run_migrations
+
+# Миграции при старте — дашборд и бот используют одну БД,
+# но запускаются как отдельные процессы. Каждый должен применять миграции.
+run_migrations()
 
 app = FastAPI(
     title="Job Hunt Dashboard",

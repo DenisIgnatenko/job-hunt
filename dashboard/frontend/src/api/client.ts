@@ -120,14 +120,17 @@ export const fetchVacancy = (id: number) =>
 export const updateVacancyStatus = (id: number, status: string) =>
   api.patch(`/vacancies/${id}/status`, { status }).then(r => r.data)
 
+// AI генерация — долгие запросы, таймаут 90 сек
+const AI_TIMEOUT = 90_000
+
 export const generateLetter = (id: number) =>
-  api.post<{ body: string }>(`/vacancies/${id}/generate-letter`).then(r => r.data)
+  api.post<{ body: string }>(`/vacancies/${id}/generate-letter`, {}, { timeout: AI_TIMEOUT }).then(r => r.data)
 
 export const fetchCompanyReport = (id: number) =>
-  api.post<{ report: string }>(`/vacancies/${id}/company-report`).then(r => r.data)
+  api.post<{ report: string }>(`/vacancies/${id}/company-report`, {}, { timeout: AI_TIMEOUT }).then(r => r.data)
 
 export const fetchMatchAnalysis = (id: number) =>
-  api.post<{ analysis: string }>(`/vacancies/${id}/match-analysis`).then(r => r.data)
+  api.post<{ analysis: string }>(`/vacancies/${id}/match-analysis`, {}, { timeout: AI_TIMEOUT }).then(r => r.data)
 
 export const fetchEvents = (params?: { status?: string }) =>
   api.get<Event[]>('/events', { params }).then(r => r.data)

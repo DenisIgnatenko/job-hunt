@@ -89,17 +89,27 @@ export default function VacancyDetailPage() {
   const handleCompanyReport = async () => {
     if (!vacancy?.id) return
     setLoadingReport(true)
-    const { report } = await fetchCompanyReport(vacancy.id)
-    setCompanyReport(report)
-    setLoadingReport(false)
+    try {
+      const { report } = await fetchCompanyReport(vacancy.id)
+      setCompanyReport(report)
+    } catch {
+      setCompanyReport('⚠️ Failed to generate report. Try again.')
+    } finally {
+      setLoadingReport(false)
+    }
   }
 
   const handleMatchAnalysis = async () => {
     if (!vacancy?.id) return
     setLoadingMatch(true)
-    const { analysis } = await fetchMatchAnalysis(vacancy.id)
-    setMatchAnalysis(analysis)
-    setLoadingMatch(false)
+    try {
+      const { analysis } = await fetchMatchAnalysis(vacancy.id)
+      setMatchAnalysis(analysis)
+    } catch {
+      setMatchAnalysis('⚠️ Failed to generate analysis. Try again.')
+    } finally {
+      setLoadingMatch(false)
+    }
   }
 
   if (loading) return <div className="loading">Loading…</div>
@@ -176,7 +186,12 @@ export default function VacancyDetailPage() {
           )}
         </div>
         {companyReport && (
-          <div className="ai-report" dangerouslySetInnerHTML={{ __html: mdToHtml(companyReport) }} />
+          <>
+            <div className="ai-report" dangerouslySetInnerHTML={{ __html: mdToHtml(companyReport) }} />
+            <button className="override-toggle" onClick={() => { setCompanyReport(null) }}>
+              🔄 Regenerate
+            </button>
+          </>
         )}
       </section>
 
@@ -195,7 +210,12 @@ export default function VacancyDetailPage() {
           )}
         </div>
         {matchAnalysis && (
-          <div className="ai-report" dangerouslySetInnerHTML={{ __html: mdToHtml(matchAnalysis) }} />
+          <>
+            <div className="ai-report" dangerouslySetInnerHTML={{ __html: mdToHtml(matchAnalysis) }} />
+            <button className="override-toggle" onClick={() => { setMatchAnalysis(null) }}>
+              🔄 Regenerate
+            </button>
+          </>
         )}
       </section>
 
