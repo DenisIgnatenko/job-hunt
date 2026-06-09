@@ -59,7 +59,7 @@ class RemotiveScraper(BaseScraper):
         # Tags from Remotive ("java", "spring-boot", etc.) - pass as description context
         tags: list[str] = job.get("tags") or []
         description_raw = job.get("description") or ""
-        description = _strip_html(description_raw)[:2000]
+        description = _strip_html(description_raw)
 
         # Append tags to description so ScoutAgent can see the stack even if description is sparse
         if tags:

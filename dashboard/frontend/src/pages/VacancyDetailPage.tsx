@@ -222,10 +222,9 @@ export default function VacancyDetailPage() {
       {vacancy.description && (
         <section className="section">
           <h2>Job description</h2>
-          {/* dangerouslySetInnerHTML — описание с The Hub/LinkedIn приходит как HTML */}
           <div
             className="description"
-            dangerouslySetInnerHTML={{ __html: vacancy.description }}
+            dangerouslySetInnerHTML={{ __html: descriptionToHtml(vacancy.description) }}
           />
         </section>
       )}
@@ -296,6 +295,18 @@ function StatusOverride({
       )}
     </div>
   )
+}
+
+/**
+ * Если описание plain text (LinkedIn, Remotive) - конвертируем в HTML.
+ * Если уже содержит HTML-теги (The Hub) - возвращаем как есть.
+ */
+function descriptionToHtml(text: string): string {
+  if (/<[a-z][\s\S]*?>/i.test(text)) return text
+  return text
+    .split(/\n{2,}/)
+    .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+    .join('')
 }
 
 /** Минимальный markdown → HTML для отчётов от Claude. */

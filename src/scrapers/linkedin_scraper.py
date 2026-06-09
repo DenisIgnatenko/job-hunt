@@ -107,7 +107,7 @@ class LinkedInScraper(BaseScraper):
 
                 description = detail.get("description", {}).get("text", "").strip()
                 if description:
-                    vacancy.description = description[:2000]
+                    vacancy.description = description
 
                 if not vacancy.location:
                     vacancy.location = detail.get("formattedLocation") or None

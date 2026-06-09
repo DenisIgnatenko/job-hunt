@@ -90,7 +90,7 @@ class TheHubScraper(BaseScraper):
             is_remote = job.get("isRemote", False)
             location = "Remote" if is_remote else job.get("countryCode") or "Denmark"
 
-        description = (job.get("description") or "")[:2000]
+        description = job.get("description") or ""
 
         # isRemote приходит как bool из API — используем напрямую, не ждём LLM
         work_format = "remote" if job.get("isRemote") else "unknown"
