@@ -5,6 +5,8 @@ import {
   fetchMatchAnalysis,
   fetchVacancy,
   generateLetter,
+  regenerateLetter,
+  saveNotes,
   updateVacancyStatus,
   type VacancyDetail,
 } from '../api/client'
@@ -50,15 +52,21 @@ export default function VacancyDetailPage() {
   const [loadingReport, setLoadingReport] = useState(false)
   const [matchAnalysis, setMatchAnalysis] = useState<string | null>(null)
   const [loadingMatch, setLoadingMatch] = useState(false)
+  const [notes, setNotes] = useState<string>('')
+  const [notesSaved, setNotesSaved] = useState(false)
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [regenComments, setRegenComments] = useState('')
+  const [showRegen, setShowRegen] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
   const nav = useNavigate()
 
   useEffect(() => {
     if (!id) return
     fetchVacancy(Number(id)).then(v => {
       setVacancy(v)
-      // Загружаем кэшированные отчёты из БД — не нужно генерировать заново
       setCompanyReport(v.company_report)
       setMatchAnalysis(v.match_analysis)
+      setNotes(v.notes ?? '')
       setLoading(false)
     })
   }, [id])
@@ -109,6 +117,29 @@ export default function VacancyDetailPage() {
       setMatchAnalysis('⚠️ Failed to generate analysis. Try again.')
     } finally {
       setLoadingMatch(false)
+    }
+  }
+
+  const handleSaveNotes = async () => {
+    if (!vacancy?.id) return
+    setSavingNotes(true)
+    await saveNotes(vacancy.id, notes)
+    setSavingNotes(false)
+    setNotesSaved(true)
+    setTimeout(() => setNotesSaved(false), 2000)
+  }
+
+  const handleRegenerate = async () => {
+    if (!vacancy?.id) return
+    setRegenerating(true)
+    try {
+      await regenerateLetter(vacancy.id, regenComments || null)
+      const updated = await fetchVacancy(vacancy.id)
+      setVacancy(updated)
+      setRegenComments('')
+      setShowRegen(false)
+    } finally {
+      setRegenerating(false)
     }
   }
 
@@ -219,6 +250,27 @@ export default function VacancyDetailPage() {
         )}
       </section>
 
+      {/* Notes */}
+      <section className="section">
+        <h2>📝 My notes</h2>
+        <textarea
+          className="notes-textarea"
+          value={notes}
+          onChange={e => { setNotes(e.target.value); setNotesSaved(false) }}
+          placeholder="Your thoughts about this company, role, or application…"
+          rows={6}
+        />
+        <div className="notes-footer">
+          <button
+            className="btn btn-secondary"
+            disabled={savingNotes}
+            onClick={handleSaveNotes}
+          >
+            {savingNotes ? 'Saving…' : notesSaved ? '✓ Saved' : 'Save notes'}
+          </button>
+        </div>
+      </section>
+
       {vacancy.description && (
         <section className="section">
           <h2>Job description</h2>
@@ -233,6 +285,41 @@ export default function VacancyDetailPage() {
         <section className="section">
           <h2>Cover letter <span className="muted">v{letter.version}</span></h2>
           <pre className="cover-letter">{letter.body}</pre>
+
+          {/* Regenerate with feedback */}
+          {!showRegen ? (
+            <button className="override-toggle" onClick={() => setShowRegen(true)}>
+              ✏️ Regenerate with feedback
+            </button>
+          ) : (
+            <div className="regen-block">
+              <textarea
+                className="notes-textarea"
+                value={regenComments}
+                onChange={e => setRegenComments(e.target.value)}
+                placeholder="What to change? e.g. 'Make the opening more specific to their product', 'Mention Go experience more prominently', 'Shorter, under 250 words'…"
+                rows={4}
+              />
+              <div className="regen-actions">
+                <button
+                  className="btn btn-primary"
+                  disabled={regenerating}
+                  onClick={handleRegenerate}
+                >
+                  {regenerating ? '⏳ Regenerating…' : '✨ Regenerate'}
+                </button>
+                <button
+                  className="override-cancel"
+                  onClick={() => { setShowRegen(false); setRegenComments('') }}
+                >
+                  Cancel
+                </button>
+                {regenerating && (
+                  <span className="generating-hint">~15 sec</span>
+                )}
+              </div>
+            </div>
+          )}
         </section>
       )}
 

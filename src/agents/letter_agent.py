@@ -40,15 +40,28 @@ class LetterAgent(BaseAgent):
   self._repo = repo or CoverLetterRepository()
   self._system = self._system_with_resume(_INSTRUCTIONS)
 
- def run(self, vacancy: Vacancy, company: Company | None = None) -> CoverLetter:
+ def run(
+  self,
+  vacancy: Vacancy,
+  company: Company | None = None,
+  user_comments: str | None = None,
+ ) -> CoverLetter:
   """Generate a cover letter draft and persist it (unapproved)."""
   assert vacancy.id is not None, "Vacancy must be persisted before generating a letter"
-  body = self._generate(vacancy, company)
-  letter = CoverLetter(vacancy_id=vacancy.id, body=body)
+  # version = последний номер + 1 (чтобы хранить историю итераций)
+  existing = self._repo.get_by_vacancy(vacancy.id)
+  version = (max(l.version for l in existing) + 1) if existing else 1
+  body = self._generate(vacancy, company, user_comments)
+  letter = CoverLetter(vacancy_id=vacancy.id, body=body, version=version)
   letter.id = self._repo.save(letter)
   return letter
 
- def _generate(self, vacancy: Vacancy, company: Company | None) -> str:
+ def _generate(
+  self,
+  vacancy: Vacancy,
+  company: Company | None,
+  user_comments: str | None = None,
+ ) -> str:
   prompt = (
    f"Job title: {vacancy.title}\n"
    f"Company: {vacancy.company or 'unknown'}\n"
@@ -57,4 +70,10 @@ class LetterAgent(BaseAgent):
   )
   if company and company.summary:
    prompt += f"\nCompany dossier:\n{company.summary}"
+  if user_comments:
+   prompt += (
+    f"\n\n## Feedback on previous version\n"
+    f"{user_comments}\n"
+    f"Rewrite the letter incorporating this feedback. Keep the voice and structure."
+   )
   return self._chat(system=self._system, user=prompt, max_tokens=700)

@@ -30,6 +30,7 @@ class Vacancy:
     telegram_message_id: Optional[int] = None
     company_report: Optional[str] = None   # AI отчёт о компании (кэш)
     match_analysis: Optional[str] = None   # AI анализ совпадения с резюме (кэш)
+    notes: Optional[str] = None            # личные заметки Denis
 
 
 @dataclass
@@ -146,6 +147,14 @@ class VacancyRepository:
             conn.execute(
                 "UPDATE vacancies SET company_report = ? WHERE id = ?",
                 (report, vacancy_id),
+            )
+            conn.commit()
+
+    def save_notes(self, vacancy_id: int, notes: str) -> None:
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE vacancies SET notes = ? WHERE id = ?",
+                (notes, vacancy_id),
             )
             conn.commit()
 

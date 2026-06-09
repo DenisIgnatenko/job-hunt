@@ -44,6 +44,23 @@ def run_research_pipeline(vacancy_id: int) -> str:
     return letter.body
 
 
+def regenerate_letter(vacancy_id: int, comments: str | None = None) -> str:
+    """
+    Blocking: пересоздаёт письмо без повторного research.
+    Принимает опциональный фидбек пользователя и передаёт в LetterAgent.
+    """
+    vacancy = _vacancy_repo.get_by_id(vacancy_id)
+    if not vacancy:
+        raise ValueError(f"Vacancy {vacancy_id} not found")
+
+    log.info("Regenerating letter for vacancy_id=%d, has_comments=%s", vacancy_id, bool(comments))
+    letter = _letter_agent.run(vacancy, company=None, user_comments=comments)
+
+    assert letter.id is not None, "Letter was not persisted"
+    _vacancy_repo.update_status(vacancy_id, "letter_sent")
+    return letter.body
+
+
 # --- Company Report ---------------------------------------------------------
 
 _COMPANY_REPORT_SYSTEM = """
@@ -88,7 +105,7 @@ class _CompanyReportAgent(BaseAgent):
             f"## Web search results\n{web}\n\n"
             f"## Job description (excerpt)\n{job_description[:800]}"
         )
-        return self._chat(system=_COMPANY_REPORT_SYSTEM, user=prompt, max_tokens=900)
+        return self._chat(system=_COMPANY_REPORT_SYSTEM, user=prompt, max_tokens=1400)
 
     def _search(self, company_name: str) -> str:
         queries = [
@@ -151,7 +168,7 @@ class _MatchAnalysisAgent(BaseAgent):
         return self._chat(
             system=self._system_with_resume(_MATCH_SYSTEM),
             user=prompt,
-            max_tokens=800,
+            max_tokens=1200,
         )
 
 

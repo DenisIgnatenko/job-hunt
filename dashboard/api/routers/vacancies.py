@@ -15,6 +15,12 @@ _VALID_STATUSES = {
 class StatusUpdate(BaseModel):
     status: str
 
+class NotesUpdate(BaseModel):
+    notes: str
+
+class RegenerateLetterRequest(BaseModel):
+    comments: str | None = None
+
 router = APIRouter(prefix="/api/vacancies", tags=["vacancies"])
 
 _vacancy_repo = VacancyRepository()
@@ -86,6 +92,7 @@ def get_vacancy(
         description=v.description,
         company_report=v.company_report,
         match_analysis=v.match_analysis,
+        notes=v.notes,
         cover_letters=[
             CoverLetterOut(
                 id=l.id,  # type: ignore[arg-type]
@@ -114,6 +121,18 @@ def update_status(
     return {"ok": True}
 
 
+@router.patch("/{vacancy_id}/notes")
+def update_notes(
+    vacancy_id: int,
+    body: NotesUpdate,
+    _: str = Depends(require_auth),
+) -> dict:
+    if not _vacancy_repo.get_by_id(vacancy_id):
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+    _vacancy_repo.save_notes(vacancy_id, body.notes)
+    return {"ok": True}
+
+
 @router.post("/{vacancy_id}/generate-letter")
 async def generate_letter(
     vacancy_id: int,
@@ -130,6 +149,22 @@ async def generate_letter(
 
     body = await asyncio.to_thread(run_research_pipeline, vacancy_id)
     return {"body": body}
+
+
+@router.post("/{vacancy_id}/regenerate-letter")
+async def regenerate_letter(
+    vacancy_id: int,
+    body: RegenerateLetterRequest,
+    _: str = Depends(require_auth),
+) -> dict:
+    """Пересоздаёт письмо (без research) с опциональным фидбеком пользователя."""
+    from dashboard.api.pipeline import regenerate_letter as regen
+
+    if not _vacancy_repo.get_by_id(vacancy_id):
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    letter_body = await asyncio.to_thread(regen, vacancy_id, body.comments)
+    return {"body": letter_body}
 
 
 @router.post("/{vacancy_id}/company-report")

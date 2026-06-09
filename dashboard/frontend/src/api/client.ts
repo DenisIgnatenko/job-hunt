@@ -71,6 +71,7 @@ export interface VacancyDetail extends Vacancy {
   cover_letters: CoverLetter[]
   company_report: string | null
   match_analysis: string | null
+  notes: string | null
 }
 
 export interface Event {
@@ -131,6 +132,12 @@ export const fetchCompanyReport = (id: number) =>
 
 export const fetchMatchAnalysis = (id: number) =>
   api.post<{ analysis: string }>(`/vacancies/${id}/match-analysis`, {}, { timeout: AI_TIMEOUT }).then(r => r.data)
+
+export const saveNotes = (id: number, notes: string) =>
+  api.patch(`/vacancies/${id}/notes`, { notes }).then(r => r.data)
+
+export const regenerateLetter = (id: number, comments: string | null) =>
+  api.post<{ body: string }>(`/vacancies/${id}/regenerate-letter`, { comments }, { timeout: AI_TIMEOUT }).then(r => r.data)
 
 export const fetchEvents = (params?: { status?: string }) =>
   api.get<Event[]>('/events', { params }).then(r => r.data)
