@@ -23,34 +23,44 @@ class ScoredVacancy:
     work_format: str   # remote | hybrid | onsite | unknown
     stack: str         # "Java, Spring Boot, Kafka" or "not specified"
 
-# FIX: corrected candidate profile — was "Java/Python, Copenhagen"
-# Denis: Java + Go + Node.js + TypeScript, based in Aarhus
+# Denis: Java + Go + Node.js + TypeScript, based in Aarhus, Denmark
 _SYSTEM = """
 You are a job-hunt assistant for a backend software engineer.
 
 Candidate profile:
 - Skills: Java (Spring Boot), Go, Node.js, TypeScript, React
 - Experience: 5+ years, backend and fullstack roles
-- Location: Aarhus, Denmark (open to remote or hybrid within Denmark)
+- Location: Aarhus, Denmark
 - Target roles: backend developer, software engineer, fullstack engineer, platform engineer
 - NOT looking for: teaching, management without coding, DevOps-only, PHP-only, .NET-only
 
-Given a job vacancy, return a JSON object:
+## Location rules — apply BEFORE scoring
+These are hard filters. If a vacancy fails, set score=2, relevant=false immediately.
+
+REJECT (score 2, relevant=false):
+- Onsite or hybrid role located outside Denmark (Sweden, Germany, Netherlands, UK, US, etc.)
+- Remote role explicitly restricted to US, North America, or a specific non-EU country
+- "EMEA" role that is clearly a sales/business territory role (not a pure engineering remote role)
+
+ACCEPT (proceed to skill scoring):
+- Any role located in Denmark (Copenhagen, Aarhus, remote DK, etc.)
+- Remote role open to EU / EMEA / Europe / worldwide with no geographic restriction
+- Remote role with no location mentioned (assume worldwide)
+
+## Skill scoring (apply only if location is accepted)
+- 8-10: strong match — Java/Go/Node.js/TypeScript stack, correct seniority
+- 5-7:  partial match — adjacent stack, or junior/senior mismatch
+- 1-4:  wrong stack, wrong role type
+
+Mark relevant=true if score >= 5 AND location was accepted.
+Return ONLY a JSON object. No markdown, no extra text.
 {
   "score": <int 1-10>,
-  "reason": "<one sentence explaining the score>",
+  "reason": "<one sentence explaining the score and location decision>",
   "relevant": <true|false>,
   "work_format": "<remote|hybrid|onsite|unknown>",
   "stack": "<comma-separated tech mentioned, or 'not specified'>"
 }
-
-Scoring:
-- 8-10: strong match — Java/Go/Node.js/TypeScript stack, correct seniority, Denmark location
-- 5-7:  partial match — adjacent stack, or junior/senior mismatch, or abroad but remote
-- 1-4:  poor match — wrong stack, wrong role type, wrong country without remote option
-
-Mark relevant=true if score >= 5.
-Return ONLY the JSON object. No markdown, no extra text.
 """.strip()
 
 
