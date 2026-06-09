@@ -80,7 +80,11 @@ export default function DashboardPage() {
           {Object.entries(stats.events)
             .filter(([, c]) => c > 0)
             .map(([status, count]) => (
-              <div key={status} className="stat-card">
+              <div
+                key={status}
+                className="stat-card"
+                onClick={() => nav(`/events?status=${status}`)}
+              >
                 <div className="stat-count">{count}</div>
                 <div className="stat-label">{status}</div>
               </div>
