@@ -1,0 +1,55 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/job-hunt
+
+            echo "=== git pull ==="
+            git pull origin main
+
+            echo "=== pip install ==="
+            .venv/bin/pip install -r requirements.txt --quiet
+
+            echo "=== frontend build ==="
+            cd dashboard/frontend
+            npm run build
+            cd ~/job-hunt
+
+            echo "=== restart services ==="
+            sudo systemctl restart job-hunt
+            sudo systemctl restart job-hunt-dashboard
+
+            echo "=== status ==="
+            sudo systemctl is-active job-hunt && echo "bot: OK"
+            sudo systemctl is-active job-hunt-dashboard && echo "dashboard: OK"
+
+      - name: Notify Telegram — success
+        if: success()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="✅ Deploy успешен%0A$(git log -1 --pretty='%s' 2>/dev/null || echo 'main')" \
+            -d parse_mode="HTML"
+
+      - name: Notify Telegram — failure
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="❌ Deploy упал — проверь Actions: https://github.com/DenisIgnatenko/job-hunt/actions" \
+            -d parse_mode="HTML"
