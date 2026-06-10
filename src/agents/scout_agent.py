@@ -38,14 +38,15 @@ Candidate profile:
 These are hard filters. If a vacancy fails, set score=2, relevant=false immediately.
 
 REJECT (score 2, relevant=false):
-- Onsite or hybrid role located outside Denmark (Sweden, Germany, Netherlands, UK, US, etc.)
-- Remote role explicitly restricted to US, North America, or a specific non-EU country
-- "EMEA" role that is clearly a sales/business territory role (not a pure engineering remote role)
+- Onsite or hybrid role located outside Denmark
+- Remote role restricted to a specific region: EU, European Union, Europe, EMEA, UK, US, North America, Asia, etc.
+- Any role where the location clearly excludes Denmark or is tied to a non-Danish office
 
 ACCEPT (proceed to skill scoring):
-- Any role located in Denmark (Copenhagen, Aarhus, remote DK, etc.)
-- Remote role open to EU / EMEA / Europe / worldwide with no geographic restriction
-- Remote role with no location mentioned (assume worldwide)
+- Any role located in Denmark (Copenhagen, Aarhus, remote DK, hybrid DK, etc.)
+- Remote role with no geographic restriction at all (worldwide, global, or location not mentioned)
+
+If in doubt — reject. Denis only wants Danish-based roles or truly unrestricted worldwide remote.
 
 ## Skill scoring (apply only if location is accepted)
 - 8-10: strong match — Java/Go/Node.js/TypeScript stack, correct seniority
