@@ -112,7 +112,7 @@ export const verifyCredentials = async (username: string, password: string): Pro
 
 export const fetchStats = () => api.get<Stats>('/stats').then(r => r.data)
 
-export const fetchVacancies = (params?: { status?: string; platform?: string }) =>
+export const fetchVacancies = (params?: { status?: string; platform?: string; q?: string }) =>
   api.get<Vacancy[]>('/vacancies', { params }).then(r => r.data)
 
 export const fetchVacancy = (id: number) =>

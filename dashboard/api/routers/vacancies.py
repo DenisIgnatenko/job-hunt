@@ -31,11 +31,13 @@ _letter_repo = CoverLetterRepository()
 def list_vacancies(
     status: str | None = Query(None),
     platform: str | None = Query(None),
+    q: str | None = Query(None),
     limit: int = Query(50, le=200),
     _: str = Depends(require_auth),
 ) -> list[VacancyOut]:
-    if status:
-        # in_progress визуально объединяет letter_sent — пользователь не видит разницы
+    if q and q.strip():
+        vacancies = _vacancy_repo.search(q.strip(), limit=200)
+    elif status:
         statuses = ["in_progress", "letter_sent"] if status == "in_progress" else [status]
         vacancies = _vacancy_repo.get_all_by_statuses(statuses)
     else:
@@ -44,7 +46,7 @@ def list_vacancies(
             "interview", "offer", "rejected", "rejected_by_company",
         ])
 
-    if platform:
+    if not q and platform:
         vacancies = [v for v in vacancies if v.platform == platform]
 
     return [
@@ -61,7 +63,7 @@ def list_vacancies(
             posted_at=v.posted_at,
             fetched_at=v.fetched_at,
         )
-        for v in vacancies[:limit]
+        for v in (vacancies if q else vacancies[:limit])
         if v.id is not None
     ]
 

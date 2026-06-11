@@ -125,6 +125,17 @@ class VacancyRepository:
             ).fetchall()
         return [_row_to_vacancy(r) for r in rows]
 
+    def search(self, q: str, limit: int = 200) -> list["Vacancy"]:
+        pattern = f"%{q}%"
+        with get_connection() as conn:
+            rows = conn.execute(
+                """SELECT * FROM vacancies
+                   WHERE title LIKE ? OR company LIKE ? OR location LIKE ?
+                   ORDER BY fetched_at DESC LIMIT ?""",
+                (pattern, pattern, pattern, limit),
+            ).fetchall()
+        return [_row_to_vacancy(r) for r in rows]
+
     def get_all_by_statuses(self, statuses: list[str]) -> list["Vacancy"]:
         placeholders = ",".join("?" * len(statuses))
         with get_connection() as conn:
