@@ -8,11 +8,12 @@ Eventbrite встраивает данные о событиях в HTML как 
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import date, datetime
 
 import requests
 
 from src.database.repository import CommunityEvent
+from src.event_utils import is_past_event_date
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +72,9 @@ class EventbriteScraper:
     """
 
     def fetch(self) -> list[CommunityEvent]:
+        # Считаем "сегодня" внутри fetch(), не на уровне модуля — процесс бота
+        # живёт неделями, дата на момент импорта быстро устареет (FIX).
+        today = date.today()
         seen: set[str] = set()
         events: list[CommunityEvent] = []
 
@@ -86,14 +90,16 @@ class EventbriteScraper:
                 if ev.url in seen:
                     continue
                 seen.add(ev.url)
-                relevant = _is_tech_event(ev.title)
+                is_past = is_past_event_date(ev.event_date, today)
+                relevant = _is_tech_event(ev.title) and not is_past
                 log.info(
-                    "[%d/10] %s | %s — %s (%s)",
+                    "[%d/10] %s | %s — %s (%s)%s",
                     ev.score,
                     "✅" if relevant else "❌",
                     ev.title,
                     ev.location or "?",
                     ev.event_date or "date unknown",
+                    " [PAST]" if is_past else "",
                 )
                 if relevant:
                     events.append(ev)

@@ -12,10 +12,12 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from src.agents.base_agent import BaseAgent
 from src.database.repository import CommunityEvent
+from src.event_utils import is_past_event_date
 
 log = logging.getLogger(__name__)
 
@@ -24,12 +26,16 @@ You are a networking assistant for Denis Ignatenko — a backend software engine
 living in Aarhus, Denmark. He wants to meet other tech people, expand his network,
 learn new things, and potentially find job leads through community events.
 
-You will receive search results (title + snippet + url) about tech events.
+You will receive today's date, followed by search results (title + snippet + url)
+about tech events.
 
 Your task:
 1. Identify which results describe real, upcoming tech events (meetups, conferences,
    workshops, hackathons, tech talks, networking events). Ignore: past events, news
    articles about events, general community pages without a specific event.
+   Compare each event's date against the given today's date — if the event date is
+   before today, it is PAST and must be excluded entirely (do not include it in the
+   output at all, regardless of how interesting it looks).
 2. For each real upcoming event, extract structured info and score its value for Denis.
 
 Return a JSON object:
@@ -77,7 +83,12 @@ class EventScoutAgent(BaseAgent):
         if not raw_results:
             return []
 
-        prompt = self._build_prompt(raw_results)
+        # date.today() внутри run(), не на уровне модуля/system-промпта —
+        # EventScoutAgent живёт неделями (один инстанс в jobs.py), system
+        # promt кэшируется и НЕ должен нести дату. Дата идёт в user-промпт,
+        # который строится заново при каждом вызове.
+        today = date.today()
+        prompt = self._build_prompt(raw_results, today)
         raw_response = self._chat(system=_SYSTEM, user=prompt, max_tokens=_MAX_TOKENS)
 
         try:
@@ -91,15 +102,23 @@ class EventScoutAgent(BaseAgent):
             score = int(item.get("score") or 0)
             title = (item.get("title") or "").strip()
             reason = item.get("reason", "")
-            relevant = score >= 5
+            event_date = (item.get("event_date") or "").strip() or None
+
+            # Жёсткий фильтр по дате в коде — не полагаемся только на LLM:
+            # модель не знает "сегодня" из контекста без явной подсказки,
+            # поэтому дата передаётся в промпт (см. _build_prompt), а здесь
+            # перепроверяем результат (FIX: отсекает прошедшие события).
+            is_past = is_past_event_date(event_date, today)
+            relevant = score >= 5 and not is_past
 
             # Логируем всё — как ScoutAgent — чтобы видеть причины отклонения
             log.info(
-                "[%d/10] %s | %s — %s",
+                "[%d/10] %s | %s — %s%s",
                 score,
                 "✅" if relevant else "❌",
                 title,
                 reason,
+                " [PAST]" if is_past else "",
             )
 
             if not relevant:
@@ -115,8 +134,11 @@ class EventScoutAgent(BaseAgent):
         )
         return scored
 
-    def _build_prompt(self, results: list[dict[str, str]]) -> str:
-        lines = ["Search results about tech events in Denmark/Aarhus:\n"]
+    def _build_prompt(self, results: list[dict[str, str]], today: date) -> str:
+        lines = [
+            f"Today's date is {today.isoformat()}.",
+            "Search results about tech events in Denmark/Aarhus:\n",
+        ]
         for i, r in enumerate(results, 1):
             title = r.get("title", "")
             body = r.get("body", "")[:300]
