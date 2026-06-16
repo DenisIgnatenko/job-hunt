@@ -285,6 +285,13 @@ class CoverLetterRepository:
 
 class CommunityEventRepository:
 
+    def get_by_id(self, event_id: int) -> Optional[CommunityEvent]:
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM community_events WHERE id = ?", (event_id,)
+            ).fetchone()
+        return _row_to_event(row) if row else None
+
     def upsert(self, event: CommunityEvent) -> tuple[int, bool]:
         """Insert or ignore duplicate (by url). Returns (id, is_new)."""
         with get_connection() as conn:

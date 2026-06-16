@@ -141,3 +141,6 @@ export const regenerateLetter = (id: number, comments: string | null) =>
 
 export const fetchEvents = (params?: { status?: string }) =>
   api.get<Event[]>('/events', { params }).then(r => r.data)
+
+export const updateEventStatus = (id: number, status: string) =>
+  api.patch(`/events/${id}/status`, { status }).then(r => r.data)

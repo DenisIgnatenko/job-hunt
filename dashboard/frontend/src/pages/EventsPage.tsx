@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { fetchEvents, type Event } from '../api/client'
+import { fetchEvents, updateEventStatus, type Event } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
 
 const STATUSES = ['all', 'new', 'interested', 'attending', 'attended', 'skipped']
@@ -8,9 +8,19 @@ const TYPE_EMOJI: Record<string, string> = {
   meetup: '👥', conference: '🎤', workshop: '🛠️', hackathon: '💻', other: '📅',
 }
 
+// Доступные действия по смене статуса — показываются на каждой карточке.
+const STATUS_ACTIONS: { value: string; label: string }[] = [
+  { value: 'new', label: '🆕 New' },
+  { value: 'interested', label: '⭐ Interested' },
+  { value: 'attending', label: '🎟 Attending' },
+  { value: 'attended', label: '✅ Attended' },
+  { value: 'skipped', label: '⏭ Skip' },
+]
+
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
+  const [updatingId, setUpdatingId] = useState<number | null>(null)
   const [params, setParams] = useSearchParams()
   const status = params.get('status') ?? 'all'
 
@@ -19,6 +29,16 @@ export default function EventsPage() {
     fetchEvents({ status: status === 'all' ? undefined : status })
       .then(data => { setEvents(data); setLoading(false) })
   }, [status])
+
+  const handleStatusChange = async (eventId: number, nextStatus: string) => {
+    setUpdatingId(eventId)
+    try {
+      await updateEventStatus(eventId, nextStatus)
+      setEvents(prev => prev.map(e => e.id === eventId ? { ...e, status: nextStatus } : e))
+    } finally {
+      setUpdatingId(null)
+    }
+  }
 
   return (
     <div className="page">
@@ -47,24 +67,33 @@ export default function EventsPage() {
       {!loading && (
         <div className="events-grid">
           {events.map(ev => (
-            <a
-              key={ev.id}
-              href={ev.url}
-              target="_blank"
-              rel="noreferrer"
-              className="event-card"
-            >
+            <div key={ev.id} className="event-card">
               <div className="event-card-header">
                 <span className="event-type-emoji">{TYPE_EMOJI[ev.event_type] ?? '📅'}</span>
                 <StatusBadge value={ev.status} />
                 <span className="event-score">{ev.score}/10</span>
               </div>
-              <div className="event-title">{ev.title}</div>
+              <a href={ev.url} target="_blank" rel="noreferrer" className="event-title">
+                {ev.title}
+              </a>
               {ev.organizer && <div className="event-meta">👤 {ev.organizer}</div>}
               {ev.location && <div className="event-meta">📌 {ev.location}</div>}
               {ev.event_date && <div className="event-meta">🗓 {ev.event_date}</div>}
               {ev.description && <div className="event-desc">{ev.description}</div>}
-            </a>
+
+              <div className="event-status-actions">
+                {STATUS_ACTIONS.map(action => (
+                  <button
+                    key={action.value}
+                    className={`event-status-btn ${ev.status === action.value ? 'event-status-btn--active' : ''}`}
+                    disabled={updatingId === ev.id || ev.status === action.value}
+                    onClick={() => handleStatusChange(ev.id, action.value)}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
