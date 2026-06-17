@@ -86,6 +86,7 @@ export interface Event {
   score: number
   status: string
   source: string
+  category: string
   fetched_at: string | null
 }
 
@@ -139,7 +140,7 @@ export const saveNotes = (id: number, notes: string) =>
 export const regenerateLetter = (id: number, comments: string | null) =>
   api.post<{ body: string }>(`/vacancies/${id}/regenerate-letter`, { comments }, { timeout: AI_TIMEOUT }).then(r => r.data)
 
-export const fetchEvents = (params?: { status?: string }) =>
+export const fetchEvents = (params?: { status?: string; category?: string }) =>
   api.get<Event[]>('/events', { params }).then(r => r.data)
 
 export const updateEventStatus = (id: number, status: string) =>

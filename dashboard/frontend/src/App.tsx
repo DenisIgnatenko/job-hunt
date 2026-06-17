@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { hasCredentials, setCredentials, verifyCredentials } from './api/client'
 import Navbar from './components/Navbar'
 import DashboardPage from './pages/DashboardPage'
+import EntertainmentPage from './pages/EntertainmentPage'
 import EventsPage from './pages/EventsPage'
 import VacanciesPage from './pages/VacanciesPage'
 import VacancyDetailPage from './pages/VacancyDetailPage'
@@ -72,6 +73,7 @@ export default function App() {
             <Route path="/vacancies" element={<VacanciesPage />} />
             <Route path="/vacancies/:id" element={<VacancyDetailPage />} />
             <Route path="/events" element={<EventsPage />} />
+            <Route path="/entertainment" element={<EntertainmentPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

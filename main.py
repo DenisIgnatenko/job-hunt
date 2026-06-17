@@ -12,6 +12,7 @@ from src.bot.telegram_bot import build_app
 from src.config import config
 from src.database.schema import run_migrations
 from src.scheduler.jobs import (
+    job_scout_entertainment,
     job_scout_events,
     job_scout_jobindex,
     job_scout_linkedin,
@@ -80,9 +81,15 @@ async def main() -> None:
         id="scout_events",
         replace_existing=True,
     )
+    scheduler.add_job(
+        job_scout_entertainment,
+        trigger=CronTrigger(hour=7, minute=30),  # 09:30 CEST — сразу после tech events
+        id="scout_entertainment",
+        replace_existing=True,
+    )
     scheduler.start()
     log.info(
-        "Scheduler started — daily at 06:00-07:10 UTC (08:00-09:10 CEST). "
+        "Scheduler started — daily at 06:00-07:30 UTC (08:00-09:30 CEST). "
         "Results ready by 10:00 local time."
     )
 

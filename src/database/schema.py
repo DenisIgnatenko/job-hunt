@@ -133,6 +133,12 @@ _V11_ADD_NOTES = """
 ALTER TABLE vacancies ADD COLUMN notes TEXT;
 """
 
+# V12 — категория события: professional (tech-meetups) | entertainment (досуг).
+# Дефолт 'professional' — все существующие записи остаются в своей категории без изменений.
+_V12_ADD_EVENT_CATEGORY = """
+ALTER TABLE community_events ADD COLUMN category TEXT NOT NULL DEFAULT 'professional';
+"""
+
 # Versioned migration list.
 # OCP: add new migrations at the end — never modify existing entries.
 # Each tuple: (version: int, sql: str)
@@ -148,6 +154,7 @@ _MIGRATIONS: list[tuple[int, str]] = [
     (9, _V9_ADD_COMPANY_REPORT),
     (10, _V10_ADD_MATCH_ANALYSIS),
     (11, _V11_ADD_NOTES),
+    (12, _V12_ADD_EVENT_CATEGORY),
 ]
 
 

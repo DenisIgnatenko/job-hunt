@@ -65,6 +65,7 @@ class CommunityEvent:
     score: int = 0                  # relevance score 1-10 from LLM
     status: str = "new"             # new | interested | attending | attended | skipped
     source: str = "web"             # web | meetup | eventbrite
+    category: str = "professional"  # professional | entertainment (V12)
     id: Optional[int] = None
     fetched_at: Optional[str] = None
     telegram_message_id: Optional[int] = None
@@ -299,10 +300,10 @@ class CommunityEventRepository:
                 """
                 INSERT INTO community_events
                     (title, url, event_type, location, event_date,
-                     description, organizer, score, status, source)
+                     description, organizer, score, status, source, category)
                 VALUES
                     (:title, :url, :event_type, :location, :event_date,
-                     :description, :organizer, :score, :status, :source)
+                     :description, :organizer, :score, :status, :source, :category)
                 ON CONFLICT(url) DO NOTHING
                 """,
                 {
@@ -316,6 +317,7 @@ class CommunityEventRepository:
                     "score":       event.score,
                     "status":      event.status,
                     "source":      event.source,
+                    "category":    event.category,
                 },
             )
             conn.commit()
@@ -326,13 +328,24 @@ class CommunityEventRepository:
             ).fetchone()
             return row["id"], False
 
-    def get_all_by_statuses(self, statuses: list[str]) -> list[CommunityEvent]:
+    def get_all_by_statuses(
+        self,
+        statuses: list[str],
+        category: Optional[str] = None,
+    ) -> list[CommunityEvent]:
+        """Возвращает события по статусам. category=None — все категории (DIP: не зависим от конкретной)."""
         placeholders = ",".join("?" * len(statuses))
+        params: list = list(statuses)
+        category_clause = ""
+        if category:
+            category_clause = " AND category = ?"
+            params.append(category)
         with get_connection() as conn:
             rows = conn.execute(
-                f"SELECT * FROM community_events WHERE status IN ({placeholders}) "
-                f"ORDER BY event_date ASC, fetched_at DESC",
-                statuses,
+                f"SELECT * FROM community_events WHERE status IN ({placeholders})"
+                f"{category_clause}"
+                f" ORDER BY event_date ASC, fetched_at DESC",
+                params,
             ).fetchall()
         return [_row_to_event(r) for r in rows]
 

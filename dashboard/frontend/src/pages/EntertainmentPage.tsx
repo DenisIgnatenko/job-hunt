@@ -4,20 +4,32 @@ import { fetchEvents, updateEventStatus, type Event } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
 
 const STATUSES = ['all', 'new', 'interested', 'attending', 'attended', 'skipped']
+
+// Эмодзи для типов развлекательных событий
 const TYPE_EMOJI: Record<string, string> = {
-  meetup: '👥', conference: '🎤', workshop: '🛠️', hackathon: '💻', other: '📅',
+  concert:  '🎵',
+  festival: '🎪',
+  theater:  '🎭',
+  outdoor:  '🌿',
+  sport:    '⚽',
+  market:   '🛍️',
+  other:    '🎠',
+  // fallback для professional типов если вдруг попадут
+  meetup:     '👥',
+  conference: '🎤',
+  workshop:   '🛠️',
+  hackathon:  '💻',
 }
 
-// Доступные действия по смене статуса — показываются на каждой карточке.
 const STATUS_ACTIONS: { value: string; label: string }[] = [
-  { value: 'new', label: '🆕 New' },
+  { value: 'new',       label: '🆕 New' },
   { value: 'interested', label: '⭐ Interested' },
   { value: 'attending', label: '🎟 Attending' },
-  { value: 'attended', label: '✅ Attended' },
-  { value: 'skipped', label: '⏭ Skip' },
+  { value: 'attended',  label: '✅ Attended' },
+  { value: 'skipped',   label: '⏭ Skip' },
 ]
 
-export default function EventsPage() {
+export default function EntertainmentPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [updatingId, setUpdatingId] = useState<number | null>(null)
@@ -26,7 +38,7 @@ export default function EventsPage() {
 
   useEffect(() => {
     setLoading(true)
-    fetchEvents({ status: status === 'all' ? undefined : status, category: 'professional' })
+    fetchEvents({ status: status === 'all' ? undefined : status, category: 'entertainment' })
       .then(data => { setEvents(data); setLoading(false) })
   }, [status])
 
@@ -42,7 +54,10 @@ export default function EventsPage() {
 
   return (
     <div className="page">
-      <h1>Events</h1>
+      <h1>🎠 Entertainment</h1>
+      <p className="page-subtitle">
+        Concerts, festivals, outdoor events and cultural happenings in Aarhus and Jutland
+      </p>
 
       <div className="filter-chips">
         {STATUSES.map(s => (
@@ -62,14 +77,18 @@ export default function EventsPage() {
       </div>
 
       {loading && <div className="loading">Loading…</div>}
-      {!loading && events.length === 0 && <div className="empty">No events found</div>}
+      {!loading && events.length === 0 && (
+        <div className="empty">
+          No entertainment events found. The scout runs daily at 09:30 CEST.
+        </div>
+      )}
 
       {!loading && (
         <div className="events-grid">
           {events.map(ev => (
             <div key={ev.id} className="event-card">
               <div className="event-card-header">
-                <span className="event-type-emoji">{TYPE_EMOJI[ev.event_type] ?? '📅'}</span>
+                <span className="event-type-emoji">{TYPE_EMOJI[ev.event_type] ?? '🎠'}</span>
                 <StatusBadge value={ev.status} />
                 <span className="event-score">{ev.score}/10</span>
               </div>

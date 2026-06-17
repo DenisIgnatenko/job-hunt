@@ -18,12 +18,14 @@ import logging
 
 from telegram.ext import Application
 
+from src.agents.entertainment_scout_agent import EntertainmentScoutAgent
 from src.agents.event_scout_agent import EventScoutAgent, ScoredEvent
 from src.agents.letter_agent import LetterAgent
 from src.agents.research_agent import ResearchAgent
 from src.agents.scout_agent import ScoutAgent
 from src.bot.telegram_bot import notify_event, notify_letter, notify_vacancy
 from src.database.repository import CommunityEvent, CommunityEventRepository, VacancyRepository
+from src.scrapers.entertainment_scraper import EntertainmentScraper
 from src.scrapers.event_scraper import EventScraper
 from src.scrapers.eventbrite_scraper import EventbriteScraper
 from src.scrapers.jobindex_scraper import JobindexScraper
@@ -41,8 +43,10 @@ _remotive_scraper = RemotiveScraper()
 _thehub_scraper = TheHubScraper()
 _event_scraper = EventScraper()
 _eventbrite_scraper = EventbriteScraper()
+_entertainment_scraper = EntertainmentScraper()
 _scout = ScoutAgent(repo=_vacancy_repo)
 _event_scout = EventScoutAgent()
+_entertainment_scout = EntertainmentScoutAgent()
 _researcher = ResearchAgent()
 _letter_agent = LetterAgent()
 
@@ -171,6 +175,25 @@ async def job_scout_events(app: Application) -> None:
         log.info("Events scout done: %d new total", total_new)
     except Exception:
         log.exception("Events scout failed")
+
+
+async def job_scout_entertainment() -> None:
+    """
+    Entertainment events: DuckDuckGo → LLM скоринг досуговых событий Орхуса/Ютландии.
+    Scheduled daily. Без Telegram-уведомлений — пользователь просматривает через дашборд.
+    """
+    log.info("Entertainment scout started")
+    try:
+        raw = await asyncio.to_thread(_entertainment_scraper.fetch)
+        scored = await asyncio.to_thread(_entertainment_scout.run, raw)
+        new_count = 0
+        for se in scored:
+            event_id, is_new = _event_repo.upsert(se.event)
+            if is_new:
+                new_count += 1
+        log.info("Entertainment scout done: %d new / %d relevant", new_count, len(scored))
+    except Exception:
+        log.exception("Entertainment scout failed")
 
 
 async def run_research_for_vacancy(app: Application, vacancy_id: int) -> None:

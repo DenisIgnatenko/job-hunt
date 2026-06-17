@@ -20,6 +20,9 @@ export default function Navbar() {
         <NavLink to="/events" className={({ isActive }) => isActive ? 'active' : ''}>
           Events
         </NavLink>
+        <NavLink to="/entertainment" className={({ isActive }) => isActive ? 'active' : ''}>
+          🎠 Entertainment
+        </NavLink>
       </div>
       <button className="logout-btn" onClick={handleLogout}>Logout</button>
     </nav>

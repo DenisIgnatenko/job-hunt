@@ -47,6 +47,7 @@ class EventOut(BaseModel):
     score: int
     status: str
     source: str
+    category: str
     fetched_at: str | None
 
 
