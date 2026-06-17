@@ -47,7 +47,7 @@ export default function VacancyDetailPage() {
   const [vacancy, setVacancy] = useState<VacancyDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
-  const [generating, setGenerating] = useState(false)
+  const [generatingLetter, setGeneratingLetter] = useState(false)
   const [companyReport, setCompanyReport] = useState<string | null>(null)
   const [loadingReport, setLoadingReport] = useState(false)
   const [matchAnalysis, setMatchAnalysis] = useState<string | null>(null)
@@ -71,27 +71,32 @@ export default function VacancyDetailPage() {
     })
   }, [id])
 
+  // Все переходы по статусу — мгновенно, без AI.
+  // Letter generation вынесена отдельно в handleGenerateLetter (SRP).
   const handleAction = async (nextStatus: string) => {
     if (!vacancy?.id) return
-
-    // "Take to work" — запускаем AI pipeline (15-30 сек)
-    if (nextStatus === 'in_progress') {
-      setGenerating(true)
-      try {
-        await generateLetter(vacancy.id)
-        const updated = await fetchVacancy(vacancy.id)
-        setVacancy(updated)
-      } finally {
-        setGenerating(false)
-      }
-      return
-    }
-
-    // Остальные статусы — просто меняем
     setUpdating(true)
-    await updateVacancyStatus(vacancy.id, nextStatus)
-    await fetchVacancy(vacancy.id).then(setVacancy)
-    setUpdating(false)
+    try {
+      await updateVacancyStatus(vacancy.id, nextStatus)
+      const updated = await fetchVacancy(vacancy.id)
+      setVacancy(updated)
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  // AI-пайплайн: research + cover letter — отдельная кнопка в секции письма.
+  // Не блокирует смену статуса (can mark applied without letter).
+  const handleGenerateLetter = async () => {
+    if (!vacancy?.id) return
+    setGeneratingLetter(true)
+    try {
+      await generateLetter(vacancy.id)
+      const updated = await fetchVacancy(vacancy.id)
+      setVacancy(updated)
+    } finally {
+      setGeneratingLetter(false)
+    }
   }
 
   const handleCompanyReport = async () => {
@@ -174,26 +179,19 @@ export default function VacancyDetailPage() {
             <button
               key={a.next}
               className={`btn ${a.style}`}
-              disabled={updating || generating}
+              disabled={updating}
               onClick={() => handleAction(a.next)}
             >
-              {generating && a.next === 'in_progress'
-                ? '⏳ Generating letter…'
-                : a.label}
+              {updating ? '⏳…' : a.label}
             </button>
           ))}
-          {generating && (
-            <span className="generating-hint">
-              Researching company + writing cover letter — ~20 sec
-            </span>
-          )}
         </div>
       )}
 
       {/* Manual status override — откат или ручная корректировка */}
       <StatusOverride
         current={vacancy.status}
-        disabled={updating || generating}
+        disabled={updating}
         onChange={async (s) => {
           setUpdating(true)
           await updateVacancyStatus(vacancy.id, s)
@@ -281,51 +279,72 @@ export default function VacancyDetailPage() {
         </section>
       )}
 
-      {letter && (
-        <section className="section">
-          <h2>Cover letter <span className="muted">v{letter.version}</span></h2>
-          <pre className="cover-letter">{letter.body}</pre>
-
-          {/* Regenerate with feedback */}
-          {!showRegen ? (
-            <button className="override-toggle" onClick={() => setShowRegen(true)}>
-              ✏️ Regenerate with feedback
+      <section className="section">
+        <div className="ai-section-header">
+          <h2>✉️ Cover letter {letter && <span className="muted">v{letter.version}</span>}</h2>
+          {/* Кнопка Generate — только когда нет письма и вакансия в работе.
+              Паттерн идентичен Company report / Match analysis (SRP). */}
+          {!letter && ['in_progress', 'letter_sent', 'new'].includes(vacancy.status) && (
+            <button
+              className="btn btn-primary"
+              disabled={generatingLetter}
+              onClick={handleGenerateLetter}
+            >
+              {generatingLetter ? '⏳ Generating…' : '✨ Generate cover letter'}
             </button>
-          ) : (
-            <div className="regen-block">
-              <textarea
-                className="notes-textarea"
-                value={regenComments}
-                onChange={e => setRegenComments(e.target.value)}
-                placeholder="What to change? e.g. 'Make the opening more specific to their product', 'Mention Go experience more prominently', 'Shorter, under 250 words'…"
-                rows={4}
-              />
-              <div className="regen-actions">
-                <button
-                  className="btn btn-primary"
-                  disabled={regenerating}
-                  onClick={handleRegenerate}
-                >
-                  {regenerating ? '⏳ Regenerating…' : '✨ Regenerate'}
-                </button>
-                <button
-                  className="override-cancel"
-                  onClick={() => { setShowRegen(false); setRegenComments('') }}
-                >
-                  Cancel
-                </button>
-                {regenerating && (
-                  <span className="generating-hint">~15 sec</span>
-                )}
-              </div>
-            </div>
           )}
-        </section>
-      )}
+        </div>
+        {generatingLetter && (
+          <span className="generating-hint">
+            Researching company + writing cover letter — ~20 sec
+          </span>
+        )}
 
-      {!letter && (
-        <div className="empty">No cover letter generated yet</div>
-      )}
+        {letter ? (
+          <>
+            <pre className="cover-letter">{letter.body}</pre>
+
+            {/* Regenerate with feedback */}
+            {!showRegen ? (
+              <button className="override-toggle" onClick={() => setShowRegen(true)}>
+                ✏️ Regenerate with feedback
+              </button>
+            ) : (
+              <div className="regen-block">
+                <textarea
+                  className="notes-textarea"
+                  value={regenComments}
+                  onChange={e => setRegenComments(e.target.value)}
+                  placeholder="What to change? e.g. 'Make the opening more specific to their product', 'Mention Go experience more prominently', 'Shorter, under 250 words'…"
+                  rows={4}
+                />
+                <div className="regen-actions">
+                  <button
+                    className="btn btn-primary"
+                    disabled={regenerating}
+                    onClick={handleRegenerate}
+                  >
+                    {regenerating ? '⏳ Regenerating…' : '✨ Regenerate'}
+                  </button>
+                  <button
+                    className="override-cancel"
+                    onClick={() => { setShowRegen(false); setRegenComments('') }}
+                  >
+                    Cancel
+                  </button>
+                  {regenerating && (
+                    <span className="generating-hint">~15 sec</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          !generatingLetter && (
+            <div className="empty">No cover letter yet</div>
+          )
+        )}
+      </section>
     </div>
   )
 }
