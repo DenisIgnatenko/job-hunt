@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from dashboard.api.routers import events, stats, vacancies
@@ -44,8 +45,17 @@ app.include_router(stats.router)
 app.include_router(vacancies.router)
 app.include_router(events.router)
 
-# Статические файлы React — монтируем если билд существует
+# Статические файлы React — монтируем если билд существует.
+#
+# StaticFiles(html=True) на "/" не подходит для SPA: при рефреше /vacancies/42
+# Starlette ищет файл с таким именем в dist/, не находит и возвращает 404.
+# FIX: монтируем только /assets (JS/CSS с правильными cache headers),
+# а catch-all маршрут ниже возвращает index.html для всех остальных путей.
 _STATIC_DIR = Path(__file__).parent.parent / "frontend" / "dist"
 if _STATIC_DIR.exists():
-    # SPA: все неизвестные пути отдают index.html (React Router обрабатывает на клиенте)
-    app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="frontend")
+    app.mount("/assets", StaticFiles(directory=_STATIC_DIR / "assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str) -> FileResponse:
+        """SPA fallback: любой путь который не матчится API роутерами → index.html."""
+        return FileResponse(_STATIC_DIR / "index.html")
