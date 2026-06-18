@@ -166,9 +166,15 @@ class EventScoutAgent(BaseAgent):
 
 
 def _strip_markdown(text: str) -> str:
-    """Remove ```json ... ``` wrapper that Claude sometimes adds."""
+    """Extract JSON object from LLM response, stripping any ```json...``` wrapper.
+
+    Прежний подход (regex {.*?}) ломался на вложенном JSON — non-greedy .*?
+    останавливался на первой } внутри вложенного объекта.
+    Надёжный вариант: find первый { и rfind последний }.
+    """
     text = text.strip()
-    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if match:
-        return match.group(1)
+    start = text.find('{')
+    end = text.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        return text[start:end + 1]
     return text
