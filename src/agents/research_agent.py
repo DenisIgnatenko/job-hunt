@@ -6,7 +6,7 @@ Web search via DuckDuckGo — no API key needed, free.
 import logging
 from datetime import datetime, timezone
 
-from duckduckgo_search import DDGS
+from ddgs import DDGS  # пакет переименован из duckduckgo_search → ddgs
 
 from src.agents.base_agent import BaseAgent
 from src.database.repository import Company, CompanyRepository, Vacancy

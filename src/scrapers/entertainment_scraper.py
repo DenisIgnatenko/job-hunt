@@ -12,7 +12,7 @@ OCP: новый класс — EventScraper не изменяется.
 import logging
 from datetime import datetime, timezone
 
-from duckduckgo_search import DDGS
+from ddgs import DDGS  # пакет переименован из duckduckgo_search → ddgs
 
 log = logging.getLogger(__name__)
 
