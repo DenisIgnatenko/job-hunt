@@ -1,15 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { fetchVacancies, type Vacancy } from '../api/client'
+import { fetchVacancies, updateVacancyStatus, type Vacancy } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
 
 const STATUSES = ['all', 'new', 'in_progress', 'applied', 'interview', 'offer', 'rejected']
+
+// Цвет бейджа Score в зависимости от значения (SRP: вся логика цвета здесь)
+function scoreBadgeClass(score: number): string {
+  if (score >= 8) return 'badge-green'
+  if (score >= 5) return 'badge-yellow'
+  return 'badge-red'
+}
 
 export default function VacanciesPage() {
   const [vacancies, setVacancies] = useState<Vacancy[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [params, setParams] = useSearchParams()
+  const [rejecting, setRejecting] = useState<number | null>(null)
   const nav = useNavigate()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -28,6 +36,22 @@ export default function VacanciesPage() {
       ).then(data => { setVacancies(data); setLoading(false) })
     }, query ? 250 : 0)
   }, [query, status, platform])
+
+  // Reject прямо из списка — без перехода на детальную страницу.
+  // e.stopPropagation() блокирует всплытие клика к <tr onClick={nav}>.
+  const handleReject = async (e: React.MouseEvent, id: number) => {
+    e.stopPropagation()
+    setRejecting(id)
+    try {
+      await updateVacancyStatus(id, 'rejected')
+      // Обновляем статус в локальном стейте — перезагрузка страницы не нужна
+      setVacancies(prev =>
+        prev.map(v => v.id === id ? { ...v, status: 'rejected' } : v)
+      )
+    } finally {
+      setRejecting(null)
+    }
+  }
 
   return (
     <div className="page">
@@ -97,8 +121,10 @@ export default function VacanciesPage() {
                 <th>Location</th>
                 <th>Platform</th>
                 <th>Format</th>
+                <th>Score</th>
                 <th>Status</th>
                 <th>Posted</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -109,8 +135,26 @@ export default function VacanciesPage() {
                   <td>{v.location ?? '—'}</td>
                   <td><StatusBadge value={v.platform} type="platform" /></td>
                   <td><StatusBadge value={v.work_format} type="format" /></td>
+                  <td>
+                    {v.score != null
+                      ? <span className={`badge ${scoreBadgeClass(v.score)}`}>{v.score}/10</span>
+                      : <span className="muted">—</span>
+                    }
+                  </td>
                   <td><StatusBadge value={v.status} /></td>
                   <td className="date-cell">{daysAgo(v.posted_at ?? v.fetched_at)}</td>
+                  <td className="actions-cell" onClick={e => e.stopPropagation()}>
+                    {!['rejected', 'rejected_by_company'].includes(v.status) && (
+                      <button
+                        className="reject-btn"
+                        onClick={e => handleReject(e, v.id)}
+                        disabled={rejecting === v.id}
+                        title="Reject this vacancy"
+                      >
+                        {rejecting === v.id ? '…' : '✕ Reject'}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

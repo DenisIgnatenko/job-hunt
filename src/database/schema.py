@@ -139,6 +139,12 @@ _V12_ADD_EVENT_CATEGORY = """
 ALTER TABLE community_events ADD COLUMN category TEXT NOT NULL DEFAULT 'professional';
 """
 
+# V13 — ScoutAgent score (1-10) сохраняется в БД чтобы показывать в дашборде.
+# NULL для вакансий, добавленных до этой миграции.
+_V13_ADD_VACANCY_SCORE = """
+ALTER TABLE vacancies ADD COLUMN score INTEGER;
+"""
+
 # Versioned migration list.
 # OCP: add new migrations at the end — never modify existing entries.
 # Each tuple: (version: int, sql: str)
@@ -155,6 +161,7 @@ _MIGRATIONS: list[tuple[int, str]] = [
     (10, _V10_ADD_MATCH_ANALYSIS),
     (11, _V11_ADD_NOTES),
     (12, _V12_ADD_EVENT_CATEGORY),
+    (13, _V13_ADD_VACANCY_SCORE),
 ]
 
 

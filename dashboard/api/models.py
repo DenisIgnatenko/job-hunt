@@ -14,6 +14,7 @@ class VacancyOut(BaseModel):
     platform: str
     work_format: str
     status: str
+    score: int | None = None   # ScoutAgent score 1-10, NULL для старых вакансий (до V13)
     url: str
     posted_at: str | None
     fetched_at: str | None

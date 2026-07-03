@@ -53,6 +53,7 @@ export interface Vacancy {
   platform: string
   work_format: string
   status: string
+  score: number | null   // ScoutAgent score 1-10, null для старых вакансий
   url: string
   posted_at: string | null
   fetched_at: string | null

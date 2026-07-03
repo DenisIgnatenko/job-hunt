@@ -25,6 +25,7 @@ class Vacancy:
     status: str = "new"
     platform: str = "unknown"
     work_format: str = "unknown"
+    score: Optional[int] = None            # ScoutAgent score 1-10 (V13)
     id: Optional[int] = None
     fetched_at: Optional[str] = None
     telegram_message_id: Optional[int] = None
@@ -150,6 +151,15 @@ class VacancyRepository:
         with get_connection() as conn:
             conn.execute(
                 "UPDATE vacancies SET status = ? WHERE id = ?", (status, vacancy_id)
+            )
+            conn.commit()
+
+    def update_score(self, vacancy_id: int, score: int) -> None:
+        """Сохраняет ScoutAgent score — вызывается в _run_scout() после upsert."""
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE vacancies SET score = ? WHERE id = ?",
+                (score, vacancy_id),
             )
             conn.commit()
 

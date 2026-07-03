@@ -61,6 +61,9 @@ async def _run_scout(app: Application, scraper_name: str, raw: list) -> None:
         sv.vacancy.work_format = sv.work_format  # persist Scout's assessment
         vacancy_id, is_new = _vacancy_repo.upsert(sv.vacancy)
         sv.vacancy.id = vacancy_id
+        # Сохраняем score всегда (не только для новых) — при повторном скрапинге
+        # оценка может измениться или ранее не была сохранена.
+        _vacancy_repo.update_score(vacancy_id, sv.score)
         if not is_new:
             continue
         new_count += 1
