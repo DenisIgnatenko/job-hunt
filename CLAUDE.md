@@ -42,12 +42,36 @@ cd "/Users/iregent/Documents/job-search/job-hunt"
 - SSH ключ: `~/.ssh/job-hunt-key.pem`
 - Ручной деплой (fallback): `bash ~/job-hunt/deploy/update.sh` (только бот, без фронтенда)
 
+### Диагностика после перерыва
+Боевая БД — на EC2 (`~/job-hunt/job_hunt.db`). Локальная `job_hunt.db` — dev-слепок,
+расходится с продом; не путать при чистке данных.
+```bash
+ssh -i ~/.ssh/job-hunt-key.pem ubuntu@3.75.175.202
+systemctl is-active job-hunt.service job-hunt-dashboard.service
+journalctl -u job-hunt.service -n 50 --no-pager | grep -v getUpdates   # без polling-шума
+sudo systemctl start job-hunt.service
+```
+Оба юнита `enabled`, но ребута не было с 04.06.2026 — если сервис остановили руками
+(`systemctl stop`), он так и останется лежать. В логах это чистый `signal=TERM` без трейсбека:
+отличать от падения. Дашборд может работать при мёртвом боте — «сайт открывается»
+не означает, что пайплайн живой; проверять по `MAX(fetched_at)` в БД.
+
+Перед любой правкой данных на проде: `sqlite3 job_hunt.db ".backup job_hunt.db.backup-$(date +%Y%m%d-%H%M%S)"`
+(консистентный снимок при работающем дашборде, в отличие от `cp`).
+
+### Зависимости не запинены
+В `requirements.txt` только нижние границы (`anthropic>=0.40.0`). Пересборка venv тянет
+свежие мажоры: на 03.09.2026 это дало `anthropic 1.3.0` (в 1.x — переезд на `httpx2`;
+код проекта httpx напрямую не трогает, `messages.create` + `cache_control` не менялись).
+При пересоздании venv — прогонять смоук: импорт агентов, `run_migrations()`, один LLM-вызов.
+
 ## Структура файлов
 ```
 main.py                          — точка входа, wiring scheduler + bot
 resume.md                        — резюме Denis (читается при старте, в системный промпт агентов)
 pyrightconfig.json               — basedpyright (typeCheckingMode: standard)
-requirements.txt                 — зависимости (ddgs, не duckduckgo-search)
+requirements.txt                 — зависимости (ddgs, не duckduckgo-search); версии не запинены
+railway.toml                     — рудимент от Railway, деплой давно на EC2; не используется
 .github/workflows/deploy.yml     — GitHub Actions: auto-deploy on push to main
 deploy/
   update.sh                      — ручное обновление бота на EC2 (fallback)
@@ -108,7 +132,9 @@ posted_at, fetched_at, status, telegram_message_id,
 platform, work_format, city,      ← V5, V6, V7
 company_report,                   ← V9 (TEXT, NULL пока не сгенерирован)
 match_analysis,                   ← V10 (TEXT, NULL пока не сгенерирован)
-notes                             ← V11 (TEXT, NULL — личные заметки Denis)
+notes,                            ← V11 (TEXT, NULL — личные заметки Denis)
+score                             ← V13 (INTEGER 1-10 от ScoutAgent, NULL для
+                                     записей до миграции — бейдж в дашборде)
 ```
 - `platform`: "jobindex" | "linkedin" | "thehub" | "remotive" | "unknown"
 - `work_format`: "remote" | "hybrid" | "onsite" | "unknown"
@@ -135,6 +161,7 @@ V1-V4: таблицы vacancies, companies, cover_letters, events (аудит л
 V5: platform, V6: work_format, V7: city
 V8: community_events, V9: company_report, V10: match_analysis, V11: notes
 V12: category в community_events (DEFAULT 'professional', существующие записи не затронуты)
+V13: score в vacancies (INTEGER, NULL для существующих — скор не восстанавливается задним числом)
 OCP: новые миграции только в конец `_MIGRATIONS` — старые не трогать.
 
 ## Расписание (CronTrigger, UTC)
