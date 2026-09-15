@@ -12,6 +12,10 @@ const STATUS_COLORS: Record<string, string> = {
   attending:          'badge-purple',
   attended:           'badge-green',
   skipped:            'badge-red',
+  // outreach contacts
+  drafted:            'badge-yellow',
+  sent:               'badge-teal',
+  replied:            'badge-green',
 }
 
 const PLATFORM_COLORS: Record<string, string> = {

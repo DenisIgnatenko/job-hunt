@@ -4,8 +4,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from dashboard.api.auth import require_auth
-from dashboard.api.models import VacancyDetailOut, VacancyOut, CoverLetterOut
-from src.database.repository import CoverLetterRepository, VacancyRepository
+from dashboard.api.models import (
+    CoverLetterOut,
+    OutreachContactOut,
+    VacancyDetailOut,
+    VacancyOut,
+)
+from src.database.repository import (
+    CoverLetterRepository,
+    OutreachContactRepository,
+    VacancyRepository,
+)
 
 _VALID_STATUSES = {
     "new", "in_progress", "letter_sent", "applied",
@@ -25,6 +34,21 @@ router = APIRouter(prefix="/api/vacancies", tags=["vacancies"])
 
 _vacancy_repo = VacancyRepository()
 _letter_repo = CoverLetterRepository()
+_outreach_repo = OutreachContactRepository()
+
+
+def _to_outreach_out(c) -> OutreachContactOut:
+    return OutreachContactOut(
+        id=c.id,  # type: ignore[arg-type]
+        full_name=c.full_name,
+        headline=c.headline,
+        role_category=c.role_category,
+        linkedin_url=c.linkedin_url,
+        source=c.source,
+        message_draft=c.message_draft,
+        status=c.status,
+        fetched_at=c.fetched_at,
+    )
 
 
 @router.get("", response_model=list[VacancyOut])
@@ -107,6 +131,9 @@ def get_vacancy(
             )
             for l in letters
             if l.id is not None
+        ],
+        outreach_contacts=[
+            _to_outreach_out(c) for c in _outreach_repo.get_by_vacancy(vacancy_id) if c.id is not None
         ],
     )
 
@@ -195,3 +222,23 @@ async def match_analysis(
         raise HTTPException(status_code=404, detail="Vacancy not found")
     analysis = await asyncio.to_thread(generate_match_analysis, vacancy_id)
     return {"analysis": analysis}
+
+
+@router.post("/{vacancy_id}/find-outreach-contacts", response_model=list[OutreachContactOut])
+async def find_outreach_contacts(
+    vacancy_id: int,
+    _: str = Depends(require_auth),
+) -> list[OutreachContactOut]:
+    """
+    Ищет людей (техлиды, HR) в компании этой вакансии: ddgs, LinkedIn people search
+    как fallback. Найденное сохраняется в БД, дедуп по linkedin_url — повторный клик
+    не плодит дубликаты, просто возвращает актуальный список.
+    """
+    from dashboard.api.pipeline import find_outreach_contacts as find_contacts
+
+    vacancy = _vacancy_repo.get_by_id(vacancy_id)
+    if not vacancy:
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    contacts = await asyncio.to_thread(find_contacts, vacancy_id)
+    return [_to_outreach_out(c) for c in contacts if c.id is not None]

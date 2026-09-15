@@ -55,6 +55,21 @@ class CoverLetter:
 
 
 @dataclass
+class OutreachContact:
+    vacancy_id: int
+    company: str
+    full_name: str
+    linkedin_url: str
+    headline: Optional[str] = None
+    role_category: str = "other"    # tech_lead | hiring_manager | hr | other
+    source: str = "web"             # web | linkedin
+    message_draft: Optional[str] = None
+    status: str = "new"             # new | drafted | sent | replied | skipped
+    id: Optional[int] = None
+    fetched_at: Optional[str] = None
+
+
+@dataclass
 class CommunityEvent:
     title: str
     url: str
@@ -375,6 +390,76 @@ class CommunityEventRepository:
             conn.commit()
 
 
+# --- OutreachContactRepository --------------------------------------------
+
+class OutreachContactRepository:
+
+    def upsert(self, contact: OutreachContact) -> tuple[int, bool]:
+        """Insert or ignore duplicate (by linkedin_url). Returns (id, is_new)."""
+        with get_connection() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO outreach_contacts
+                    (vacancy_id, company, full_name, headline, role_category,
+                     linkedin_url, source, message_draft, status)
+                VALUES
+                    (:vacancy_id, :company, :full_name, :headline, :role_category,
+                     :linkedin_url, :source, :message_draft, :status)
+                ON CONFLICT(linkedin_url) DO NOTHING
+                """,
+                {
+                    "vacancy_id":     contact.vacancy_id,
+                    "company":        contact.company,
+                    "full_name":      contact.full_name,
+                    "headline":       contact.headline,
+                    "role_category":  contact.role_category,
+                    "linkedin_url":   contact.linkedin_url,
+                    "source":         contact.source,
+                    "message_draft":  contact.message_draft,
+                    "status":         contact.status,
+                },
+            )
+            conn.commit()
+            if cur.lastrowid:
+                return cur.lastrowid, True
+            row = conn.execute(
+                "SELECT id FROM outreach_contacts WHERE linkedin_url = ?",
+                (contact.linkedin_url,),
+            ).fetchone()
+            return row["id"], False
+
+    def get_by_id(self, contact_id: int) -> Optional[OutreachContact]:
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM outreach_contacts WHERE id = ?", (contact_id,)
+            ).fetchone()
+        return _row_to_contact(row) if row else None
+
+    def get_by_vacancy(self, vacancy_id: int) -> list[OutreachContact]:
+        with get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM outreach_contacts WHERE vacancy_id = ? ORDER BY fetched_at DESC",
+                (vacancy_id,),
+            ).fetchall()
+        return [_row_to_contact(r) for r in rows]
+
+    def update_status(self, contact_id: int, status: str) -> None:
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE outreach_contacts SET status = ? WHERE id = ?",
+                (status, contact_id),
+            )
+            conn.commit()
+
+    def save_message_draft(self, contact_id: int, draft: str) -> None:
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE outreach_contacts SET message_draft = ?, status = 'drafted' WHERE id = ?",
+                (draft, contact_id),
+            )
+            conn.commit()
+
+
 # --- Helpers -------------------------------------------------------------
 
 def _row_to_vacancy(row: sqlite3.Row) -> Vacancy:
@@ -401,3 +486,9 @@ def _row_to_event(row: sqlite3.Row) -> CommunityEvent:
     d = dict(row)
     known = {k for k in CommunityEvent.__dataclass_fields__}
     return CommunityEvent(**{k: v for k, v in d.items() if k in known})
+
+
+def _row_to_contact(row: sqlite3.Row) -> OutreachContact:
+    d = dict(row)
+    known = {k for k in OutreachContact.__dataclass_fields__}
+    return OutreachContact(**{k: v for k, v in d.items() if k in known})

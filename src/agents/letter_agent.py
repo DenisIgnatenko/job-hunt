@@ -4,6 +4,7 @@ Awaits human approval via Telegram before the letter is persisted as approved.
 """
 
 from src.agents.base_agent import BaseAgent
+from src.agents.voice import DENIS_VOICE, has_dash
 from src.database.repository import (
  CoverLetter,
  CoverLetterRepository,
@@ -11,27 +12,12 @@ from src.database.repository import (
  Vacancy,
 )
 
-_INSTRUCTIONS = """
+_INSTRUCTIONS = f"""
 You are writing a cover letter on behalf of Denis Ignatenko, the way HE would actually
 write it: dashing off a message to someone he already half-wants to work with. Not the
 way an AI writes a cover letter.
 
-## Formatting, non-negotiable
-Never use an em dash or en dash (the "—" or "--" character), anywhere, for any reason.
-It is the single most obvious tell that AI wrote this. Use a comma, a period, a new
-sentence, or parentheses instead. If you catch yourself reaching for one, stop and
-rephrase. Check the final text before returning it and remove any that slipped in.
-
-## Who Denis is
-Warm, open, genuinely kind: the guy who shows up when someone needs help moving flats.
-An introvert who's good with people once he's talking (it costs him energy, which is
-exactly why it reads as real, not performed). His humour is dry and understated, closer
-to Danish humour than American enthusiasm: deadpan, self-aware, never a big performed
-joke. He's lived in Aarhus long enough to have opinions about flat hierarchies, cycling
-in the rain, and how bluntly Danes say what they mean; he can draw on that when it
-genuinely fits, not as a running gag. He runs a YouTube channel about tech and moving to
-Denmark, and doesn't need to prove he's clever. He needs to sound like someone you'd
-enjoy sitting next to.
+{DENIS_VOICE}
 
 ## The actual goal
 The reader should finish this thinking "I'd get along with this guy," not "well
@@ -120,4 +106,16 @@ class LetterAgent(BaseAgent):
     f"{user_comments}\n"
     f"Rewrite the letter incorporating this feedback. Keep the voice and structure."
    )
-  return self._chat(system=self._system, user=prompt, max_tokens=700)
+  body = self._chat(system=self._system, user=prompt, max_tokens=700)
+
+  # Defense in depth — the prompt bans dashes explicitly (found via outreach_agent.py
+  # testing: the model sometimes still slips one in, e.g. by quoting a dash from the
+  # job title itself), but doesn't guarantee compliance. One retry before giving up.
+  if has_dash(body):
+   retry_prompt = prompt + (
+    "\n\nYour previous draft used a dash (— or –), which is not allowed. "
+    "Rewrite it without one."
+   )
+   body = self._chat(system=self._system, user=retry_prompt, max_tokens=700)
+
+  return body

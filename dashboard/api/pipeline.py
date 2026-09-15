@@ -5,13 +5,22 @@ Research + letter pipeline без зависимости от Telegram (SRP).
 
 import logging
 
-from duckduckgo_search import DDGS
+from ddgs import DDGS  # FIX: пакет переименован из duckduckgo_search; старый импорт
+                        # ловил ModuleNotFoundError и молча ронял Company report
 
 from src.agents.base_agent import BaseAgent
 from src.agents.letter_agent import LetterAgent
+from src.agents.outreach_agent import OutreachAgent
+from src.agents.outreach_scout_agent import OutreachScoutAgent
 from src.agents.research_agent import ResearchAgent
 from src.config import config
-from src.database.repository import CoverLetterRepository, VacancyRepository
+from src.database.repository import (
+    CoverLetterRepository,
+    OutreachContact,
+    OutreachContactRepository,
+    VacancyRepository,
+)
+from src.scrapers.outreach_finder import OutreachFinder
 
 log = logging.getLogger(__name__)
 
@@ -19,6 +28,10 @@ _vacancy_repo = VacancyRepository()
 _letter_repo = CoverLetterRepository()
 _researcher = ResearchAgent()
 _letter_agent = LetterAgent()
+_outreach_repo = OutreachContactRepository()
+_outreach_finder = OutreachFinder()
+_outreach_scout = OutreachScoutAgent()
+_outreach_agent = OutreachAgent()
 
 
 def run_research_pipeline(vacancy_id: int) -> str:
@@ -197,3 +210,46 @@ def generate_match_analysis(vacancy_id: int) -> str:
     analysis = _match_agent.run(vacancy.title, vacancy.description or "")
     _vacancy_repo.save_match_analysis(vacancy_id, analysis)
     return analysis
+
+
+# --- Outreach -----------------------------------------------------------
+
+def find_outreach_contacts(vacancy_id: int) -> list[OutreachContact]:
+    """
+    Blocking: ищет людей в компании этой вакансии (ddgs, LinkedIn fallback),
+    сохраняет найденных в БД. Дедуп по linkedin_url — повторный вызов не плодит
+    дубликаты, просто возвращает актуальный список по вакансии.
+    """
+    vacancy = _vacancy_repo.get_by_id(vacancy_id)
+    if not vacancy:
+        raise ValueError(f"Vacancy {vacancy_id} not found")
+    company_name = vacancy.company or "Unknown company"
+
+    log.info("Outreach search started for vacancy_id=%d, company='%s'", vacancy_id, company_name)
+    raw_results, source = _outreach_finder.find(company_name)
+    scored = _outreach_scout.run(company_name, raw_results, vacancy_id, source)
+
+    for sc in scored:
+        contact_id, _is_new = _outreach_repo.upsert(sc.contact)
+        sc.contact.id = contact_id
+
+    log.info(
+        "Outreach search done for vacancy_id=%d: %d contacts saved",
+        vacancy_id, len(scored),
+    )
+    return _outreach_repo.get_by_vacancy(vacancy_id)
+
+
+def draft_outreach_message(contact_id: int) -> str:
+    """Blocking: генерирует LinkedIn connection-request note для контакта. Сохраняет в БД."""
+    contact = _outreach_repo.get_by_id(contact_id)
+    if not contact:
+        raise ValueError(f"Outreach contact {contact_id} not found")
+    vacancy = _vacancy_repo.get_by_id(contact.vacancy_id)
+    if not vacancy:
+        raise ValueError(f"Vacancy {contact.vacancy_id} not found")
+
+    log.info("Drafting outreach message for contact_id=%d", contact_id)
+    message = _outreach_agent.run(contact, vacancy)
+    _outreach_repo.save_message_draft(contact_id, message)
+    return message

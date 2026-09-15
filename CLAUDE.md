@@ -11,7 +11,7 @@
 - python-telegram-bot 22.x — HITL уведомления
 - APScheduler 3.x — CronTrigger (не IntervalTrigger), UTC
 - SQLite, sqlite3 stdlib (без ORM в schema layer)
-- linkedin-api 2.3.x — LinkedIn scraping через cookie-auth
+- linkedin-api 2.3.x — LinkedIn scraping через cookie-auth (job search + outreach people search)
 - **ddgs** (бывший duckduckgo-search, переименован) — веб-поиск в ResearchAgent, EventScoutAgent, EntertainmentScoutAgent
 - FastAPI + Uvicorn — дашборд API (порт 8080)
 - React 18 + TypeScript + Vite — дашборд SPA
@@ -84,20 +84,30 @@ src/database/repository.py       — VacancyRepository, CommunityEventRepository
 src/event_utils.py               — is_past_event_date() — общий фильтр прошедших событий (DRY)
 
 src/agents/base_agent.py         — BaseAgent: _chat() с prompt caching (cache_control: ephemeral)
+src/agents/voice.py              — DENIS_VOICE (общий блок "голоса" для LetterAgent + OutreachAgent),
+                                   extract_json_object(), has_dash() — см. архитектурные решения
 src/agents/scout_agent.py        — ScoutAgent: pre-filter по title + LLM скоринг → ScoredVacancy
 src/agents/research_agent.py     — ResearchAgent: ddgs (3 запроса) + LLM dossier
-src/agents/letter_agent.py       — LetterAgent: письмо в стиле Denis, принимает user_comments для перегенерации
+src/agents/letter_agent.py       — LetterAgent: письмо в стиле Denis (180-230 слов, без длинных тире,
+                                   см. "Личность Denis"), принимает user_comments для перегенерации
 src/agents/event_scout_agent.py  — EventScoutAgent: batch LLM скоринг tech-событий (category=professional)
 src/agents/entertainment_scout_agent.py — EntertainmentScoutAgent: batch LLM скоринг досуговых событий Орхуса/Ютландии (category=entertainment)
+src/agents/outreach_scout_agent.py — OutreachScoutAgent: batch LLM извлечение+классификация людей
+                                     (tech_lead|hiring_manager|hr|other) из веб-поиска, confidence >= 6
+src/agents/outreach_agent.py     — OutreachAgent: черновик LinkedIn connection-request note
+                                   (200-260 симв., без тире, всегда отправляется Denis'ом вручную)
 
 src/scrapers/base_scraper.py       — BaseScraper (ABC)
 src/scrapers/jobindex_scraper.py   — Jobindex RSS, поиск по ключевым словам
 src/scrapers/linkedin_scraper.py   — LinkedIn через cookie-auth (li_at + JSESSIONID)
-src/scrapers/thehub_scraper.py     — The Hub REST API, главный датский tech job board
+src/scrapers/thehub_scraper.py     — The Hub REST API v2, главный датский tech job board
+                                     (URL и description собираются отдельно — см. архитектурные решения)
 src/scrapers/remotive_scraper.py   — Remotive public API, remote-only вакансии
 src/scrapers/eventbrite_scraper.py — Eventbrite HTML → JSON-LD парсинг, без API ключа
 src/scrapers/event_scraper.py      — ddgs поиск tech-событий
 src/scrapers/entertainment_scraper.py — ddgs поиск развлекательных событий (концерты, фестивали, театр)
+src/scrapers/outreach_finder.py    — поиск людей в компании: ddgs (site:linkedin.com/in) сначала,
+                                     linkedin_api.search_people() как fallback
 
 src/bot/telegram_bot.py          — весь Telegram UI (parse_mode="HTML" везде)
 src/scheduler/jobs.py            — job functions: scout_jobindex, scout_remotive, scout_thehub,
@@ -105,18 +115,23 @@ src/scheduler/jobs.py            — job functions: scout_jobindex, scout_remoti
 
 dashboard/api/main.py            — FastAPI app: run_migrations(), SPA catch-all, CORS, no docs
 dashboard/api/pipeline.py        — run_research_pipeline(), regenerate_letter(),
-                                   generate_company_report(), generate_match_analysis()
+                                   generate_company_report(), generate_match_analysis(),
+                                   find_outreach_contacts(), draft_outreach_message()
 dashboard/api/models.py          — Pydantic request/response models
 dashboard/api/routers/
   vacancies.py                   — GET/PATCH /api/vacancies, PATCH /notes,
-                                   POST generate-letter/regenerate-letter/company-report/match-analysis
+                                   POST generate-letter/regenerate-letter/company-report/match-analysis,
+                                   POST find-outreach-contacts (vacancy-scoped, живёт здесь — см. решения)
   events.py                      — GET /api/events?category=, PATCH /api/events/{id}/status
+  outreach.py                    — POST /api/outreach/{id}/draft-message, PATCH /{id}/status
+                                   (contact-scoped, не влезает в /api/vacancies/{vacancy_id} префикс)
   stats.py                       — GET /api/stats
 dashboard/frontend/              — React SPA (Vite build → dist/)
   src/api/client.ts              — axios с Basic Auth interceptors, AI_TIMEOUT=90000ms
   src/pages/VacanciesPage.tsx
   src/pages/VacancyDetailPage.tsx — статусы, action buttons (decoupled от генерации письма),
-                                    AI reports, notes, status override, перегенерация письма с фидбеком
+                                    AI reports, notes, status override, перегенерация письма с фидбеком,
+                                    секция 🤝 Outreach contacts (find → draft → copy → mark sent)
   src/pages/EventsPage.tsx       — professional events (category=professional)
   src/pages/EntertainmentPage.tsx — развлекательные события (category=entertainment)
   src/pages/DashboardPage.tsx
@@ -150,6 +165,19 @@ category                          ← V12 ("professional" | "entertainment", DEF
 - `source`: "eventbrite" | "web"
 - `category`: "professional" (tech meetups) | "entertainment" (концерты, фестивали)
 
+### Таблица outreach_contacts (V14)
+```
+id, vacancy_id (FK vacancies), company, full_name, headline,
+role_category, linkedin_url (UNIQUE), source, message_draft,
+status, fetched_at
+```
+- `role_category`: "tech_lead" | "hiring_manager" | "hr" | "other"
+- `source`: "web" (ddgs) | "linkedin" (search_people fallback)
+- `status`: "new" | "drafted" | "sent" | "replied" | "skipped"
+- `linkedin_url` — дедупликация, как `source_id` у vacancies / `url` у events
+- `sent` выставляет Denis вручную после того как сам отправил сообщение из LinkedIn —
+  в таблице нет ничего похожего на "auto-sent" или timestamp автоотправки
+
 ### Статусы вакансий (полный жизненный цикл)
 ```
 new → in_progress → letter_sent → applied → interview → offer → rejected → rejected_by_company
@@ -162,6 +190,7 @@ V5: platform, V6: work_format, V7: city
 V8: community_events, V9: company_report, V10: match_analysis, V11: notes
 V12: category в community_events (DEFAULT 'professional', существующие записи не затронуты)
 V13: score в vacancies (INTEGER, NULL для существующих — скор не восстанавливается задним числом)
+V14: outreach_contacts — люди для аутрича, найденные по конкретной вакансии
 OCP: новые миграции только в конец `_MIGRATIONS` — старые не трогать.
 
 ## Расписание (CronTrigger, UTC)
@@ -194,6 +223,8 @@ OCP: новые миграции только в конец `_MIGRATIONS` — с
 - HTTP Basic Auth (DASHBOARD_USER / DASHBOARD_PASSWORD)
 - Вкладки: Dashboard, Vacancies, Events (professional), 🎠 Entertainment
 - Фильтры по статусу; события фильтруются по category на уровне API
+- VacanciesPage (список): колонка со скором (score, V13 — зелёный/жёлтый/красный бейдж)
+  и inline кнопка ❌ Reject в каждой строке (stopPropagation, мгновенно, без перезагрузки страницы)
 - Events и Entertainment — карточки с inline кнопками смены статуса (new/interested/attending/attended/skipped)
 - Детальная карточка вакансии:
   - **Action bar**: `⚙️ Take to work` (мгновенно, только статус) · `📤 Mark applied` · `❌ Reject` и т.д.
@@ -202,6 +233,9 @@ OCP: новые миграции только в конец `_MIGRATIONS` — с
   - "📝 My notes" — textarea для личных заметок (PATCH /notes, хранится в БД V11)
   - Job description (HTML или plain text через descriptionToHtml())
   - Версионирование писем: v1, v2, v3... — история итераций в БД
+  - **🤝 Outreach contacts секция**: `🔍 Find contacts` (ddgs + LinkedIn fallback) → карточка на
+    человека (имя, роль, ссылка на LinkedIn) → `✍️ Draft message` → редактируемый textarea →
+    `📋 Copy` → Denis сам отправляет из LinkedIn → `✅ Mark sent`. Никакой автоотправки нигде в UI.
 - AI секции (кэшированы в БД V9/V10):
   - "Company report" — 3 ddgs запроса + LLM (max_tokens=1400)
   - "Match analysis" — сравнение резюме с вакансией (max_tokens=1200)
@@ -245,6 +279,22 @@ EntertainmentScraper.fetch() → list[dict] (ddgs: концерты, фести�
 CommunityEventRepository.upsert() → (id, is_new)
   → Telegram уведомлений НЕТ — только дашборд
 Denis: кнопки смены статуса на странице Entertainment
+```
+
+## Поток данных (outreach)
+```
+Denis на карточке вакансии: [🔍 Find contacts]
+  → OutreachFinder.find(company): ddgs (site:linkedin.com/in, 2 группы запросов по ролям)
+     → если пусто: linkedin_api.search_people() fallback, ТОЛЬКО тогда, один раз
+  → OutreachScoutAgent.run(): один batch LLM вызов, строгая фильтрация по confidence >= 6
+     (ddgs отдаёт много шума — несвязанные люди, старые позиции; модель должна отклонять
+     всё что не явно "сейчас работает в этой компании, в релевантной роли")
+  → OutreachContactRepository.upsert() → (id, is_new), дедуп по linkedin_url
+Denis на карточке контакта: [✍️ Draft message]
+  → OutreachAgent.run(contact, vacancy) → LinkedIn connection-request note, 200-260 симв.
+  → save_message_draft() → status='drafted'
+Denis: редактирует в textarea (если нужно) → [📋 Copy] → вставляет и отправляет САМ из LinkedIn
+  → [✅ Mark sent] → status='sent' (ничего не отправляется системой автоматически)
 ```
 
 ## Ключевые архитектурные решения
@@ -329,6 +379,64 @@ Credentials в sessionStorage браузера — сбрасываются пр
 Новый scraper = новый класс, наследующий `BaseScraper`.
 Существующий код не меняется (jobs.py получает новый scraper через import + add_job).
 
+### Outreach — LinkedIn draft-only, без автоотправки (14.09.2026)
+`linkedin_api` (уже зависимость проекта, уже используется для job scraping) технически умеет
+`search_people`, `get_profile`, `add_connection`, `send_message` — полная автоматизация
+возможна. Осознанно не делаем: LinkedIn Automation Policy явно запрещает скриптовую отправку
+сообщений/коннектов, и это активно детектится. Текущее использование (job scraping через
+cookie-auth) — уже серая зона, которую Denis принимает; автоотправка с личного аккаунта —
+принципиально другой уровень риска: ограничение аккаунта ударит прямо во время активного
+поиска работы, это хуже чем потерять один источник вакансий.
+Решение: система находит людей и готовит черновик, Denis копирует и отправляет сам из
+LinkedIn UI. Нигде в коде нет вызова `send_message()` или `add_connection()`.
+Источники контактов: ddgs (публичный веб-поиск, не трогает LinkedIn-сессию) сначала,
+`search_people()` — fallback, и только один раз за клик "Find contacts" (не по расписанию,
+не батчами) — активность на LinkedIn остаётся низкой и человеческого темпа.
+
+### DENIS_VOICE — общий модуль "голоса" (DRY)
+`src/agents/voice.py` — блок "кто такой Denis" + запрет тире, вынесен из letter_agent.py при
+добавлении OutreachAgent (14.09.2026): оба агента должны звучать как один и тот же человек,
+дублировать промпт-текст в двух местах значило бы настраивать тон дважды при каждой правке.
+Также здесь `extract_json_object()` (find/rfind вместо non-greedy regex — тот же fix что был
+в `_strip_markdown()` у event/entertainment scout агентов, теперь общий, не третья копия).
+
+**has_dash() — defense in depth против тире.** Инструкция "никогда не используй тире" не
+гарантирует соблюдение: при разработке OutreachAgent модель скопировала en dash (–) прямо
+из заголовка вакансии ("Software Engineer – Integrations"), который был в промпте как
+контекст — а отдельно, на чистых данных без источника с тире, всё равно иногда вставляла
+свой em dash в качестве риторической конструкции (~1 из 3 прогонов). Код теперь перепроверяет
+результат и делает один retry с явным указанием на конкретную ошибку — тот же принцип, что
+`is_past_event_date()` (инструкция LLM + проверка в коде). Применено и в LetterAgent, и в
+OutreachAgent. Важно: правило должно запрещать сам символ (— или –), а не только em dash —
+исходная формулировка называла оба, но приводила только символ em dash как пример, из-за
+чего en dash из чужого текста проходил незамеченным.
+
+### TheHub — миграция на API v2 (04.09.2026)
+`https://thehub.io/api/jobs` стал отдавать 404 — TheHub перевёл поиск на `/api/v2/jobs`
+без анонса. Обнаружено потому что вакансии с TheHub перестали приходить (бот молчал 2 месяца,
+за это время API успел смениться). Форма ответа `docs[]` та же, но пропали `absoluteJobUrl`
+и `description`:
+- URL строится вручную из `id`: `https://thehub.io/jobs/{id}` (проверено по ссылкам на
+  странице листинга)
+- `description` берётся отдельным запросом на страницу вакансии — там есть JSON-LD
+  (`schema.org JobPosting`), тем же приёмом, что `EventbriteScraper` использует для событий
+- Enrichment идёт только для вакансий, прошедших `_is_tech_title()` — паттерн как в
+  `LinkedInScraper._enrich_descriptions()`, не тратим лишние запросы на заведомо нерелевантные
+- Порядок атрибутов в `<script>`-теге на странице TheHub нестандартный (`data-hid` перед
+  `type`) — regex не завязан на порядок, матчит любой `ld+json` блок и проверяет `@type`
+  после `json.loads()`
+
+Урок: сторонние API job board'ов меняются без уведомления. Если вакансии с площадки резко
+пропали (0 fetched в логах при том что раньше были), первым делом проверять код ответа
+скрапера напрямую (`curl`), а не сразу чинить логику скоринга.
+
+### FIX: dashboard/api/pipeline.py использовал старое имя пакета (14.09.2026)
+`from duckduckgo_search import DDGS` вместо `from ddgs import DDGS` — единственное место в
+проекте с таким импортом, всё остальное давно на `ddgs`. Ловилось `ModuleNotFoundError` при
+любом вызове функций из pipeline.py, включая кнопку "Company report" на дашборде — она была
+сломана в проде необнаруженным. Обнаружено попутно при добавлении outreach-функций в тот же
+файл: `find_outreach_contacts()` не заработала бы, не почини строку импорта.
+
 ## .env переменные
 ```
 ANTHROPIC_API_KEY
@@ -351,11 +459,37 @@ RESUME_PATH=resume.md
 
 ## Личность Denis (для letter_agent)
 Открытый, тёплый, эмпат. Интроверт который хорошо общается (энергия тратится).
-Любит юмор — мемы, отсылки из фильмов/книг. YouTube канал @midlifecode (1300+ подп.).
-Запоминающийся, яркий. Письма должны быть живыми, не корпоративными.
+Юмор сухой и сдержанный, ближе к датскому, чем к американскому — deadpan, без форсированных
+шуток. Живёт в Aarhus достаточно долго, чтобы иметь мнение про плоские иерархии и датскую
+прямоту — но это фон, не повторяющаяся шутка в каждом письме. YouTube канал @midlifecode
+(1300+ подп.) — упоминается по ситуации, не как дежурный факт. Открыт к переезду куда угодно —
+без драмы, прямо, не извиняющимся тоном ("happy to relocate", не "would need some conversation").
+Запоминающийся, яркий. Письма должны звучать как реальное сообщение человеку, а не как
+эссе, написанное чтобы впечатлить.
+
+**04.09.2026 — переписан промпт (`src/agents/letter_agent.py`).** Раньше LetterAgent генерировал
+формально-правильные, но "ИИ-шные" письма: 250-320 слов, обильные длинные тире, конструкции
+"It's not X, it's Y", пересказ 2-3 компаний из резюме подряд, одинаковая шаблонная концовка
+про work permit/Aarhus/YouTube в каждом письме. Абстрактная инструкция "dry wit" в промпте
+не работала — юмора не было вообще. Что изменилось:
+- **Длинные тире запрещены явно** — прямое требование Denis: это главный маркер ИИ-текста
+  (совпадает с его глобальным CLAUDE.md-правилом про форматирование, но здесь применено
+  к тексту, который генерирует LLM, а не к моим собственным ответам)
+- Длина сокращена до 180-230 слов (было 250-320)
+- В промпт добавлен список конкретных наблюдаемых штампов как "avoid" — абстрактные
+  инструкции про тон не работают, конкретные примеры плохих оборотов работают
+- Переезд: раньше "упоминать только при неоднозначности локации" → теперь прямо и уверенно,
+  раз Denis реально готов переехать куда угодно
 
 ## Что не реализовано (возможные следующие шаги)
 - Indeed scraper
 - Greenhouse/Lever API для карьерных страниц компаний
 - Meetup RSS (нет без Pro подписки)
 - Dashboard stats разбить по категориям событий (сейчас events считаются все вместе)
+- Email outreach (осознанно отложено — поиск личных email адресов людей заметно более
+  GDPR-чувствителен чем поиск публичных LinkedIn-профилей через ddgs; решать отдельно,
+  если LinkedIn draft-flow окажется полезным)
+- Telegram-уведомления для outreach (сейчас только дашборд, по прецеденту Entertainment —
+  добавить notify_* тривиально, если понадобятся push-уведомления о новых контактах)
+- Standalone outreach по компании без привязанной вакансии (сейчас всегда стартует от
+  вакансии — есть контекст для персонализации сообщения)

@@ -67,12 +67,25 @@ export interface CoverLetter {
   created_at: string | null
 }
 
+export interface OutreachContact {
+  id: number
+  full_name: string
+  headline: string | null
+  role_category: string      // tech_lead | hiring_manager | hr | other
+  linkedin_url: string
+  source: string              // web | linkedin
+  message_draft: string | null
+  status: string               // new | drafted | sent | replied | skipped
+  fetched_at: string | null
+}
+
 export interface VacancyDetail extends Vacancy {
   description: string | null
   cover_letters: CoverLetter[]
   company_report: string | null
   match_analysis: string | null
   notes: string | null
+  outreach_contacts: OutreachContact[]
 }
 
 export interface Event {
@@ -146,3 +159,14 @@ export const fetchEvents = (params?: { status?: string; category?: string }) =>
 
 export const updateEventStatus = (id: number, status: string) =>
   api.patch(`/events/${id}/status`, { status }).then(r => r.data)
+
+export const findOutreachContacts = (vacancyId: number) =>
+  api.post<OutreachContact[]>(`/vacancies/${vacancyId}/find-outreach-contacts`, {}, { timeout: AI_TIMEOUT })
+    .then(r => r.data)
+
+export const draftOutreachMessage = (contactId: number) =>
+  api.post<{ message: string }>(`/outreach/${contactId}/draft-message`, {}, { timeout: AI_TIMEOUT })
+    .then(r => r.data)
+
+export const updateOutreachStatus = (contactId: number, status: string) =>
+  api.patch(`/outreach/${contactId}/status`, { status }).then(r => r.data)

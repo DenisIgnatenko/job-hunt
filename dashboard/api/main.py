@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from dashboard.api.routers import events, stats, vacancies
+from dashboard.api.routers import events, outreach, stats, vacancies
 from src.database.schema import run_migrations
 
 # Миграции при старте — дашборд и бот используют одну БД,
@@ -44,6 +44,7 @@ app.add_middleware(
 app.include_router(stats.router)
 app.include_router(vacancies.router)
 app.include_router(events.router)
+app.include_router(outreach.router)
 
 # Статические файлы React — монтируем если билд существует.
 #

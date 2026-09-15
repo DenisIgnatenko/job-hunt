@@ -28,12 +28,25 @@ class CoverLetterOut(BaseModel):
     created_at: str | None
 
 
+class OutreachContactOut(BaseModel):
+    id: int
+    full_name: str
+    headline: str | None
+    role_category: str
+    linkedin_url: str
+    source: str
+    message_draft: str | None
+    status: str
+    fetched_at: str | None
+
+
 class VacancyDetailOut(VacancyOut):
     description: str | None
     cover_letters: list[CoverLetterOut] = []
     company_report: str | None = None
     match_analysis: str | None = None
     notes: str | None = None
+    outreach_contacts: list[OutreachContactOut] = []
 
 
 class EventOut(BaseModel):

@@ -145,6 +145,40 @@ _V13_ADD_VACANCY_SCORE = """
 ALTER TABLE vacancies ADD COLUMN score INTEGER;
 """
 
+# V14 — outreach_contacts: люди (техлиды, HR), найденные для аутрича по конкретной
+# вакансии. linkedin_url UNIQUE — дедупликация как source_id у vacancies / url у events.
+# Сообщение (message_draft) генерируется отдельно и всегда отправляется Denis'ом
+# вручную — таблица не хранит ничего похожего на "auto-send".
+_V14_OUTREACH_CONTACTS = """
+CREATE TABLE IF NOT EXISTS outreach_contacts (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    vacancy_id           INTEGER NOT NULL REFERENCES vacancies(id),
+    company              TEXT    NOT NULL,
+    full_name            TEXT    NOT NULL,
+    headline             TEXT,
+    role_category        TEXT    NOT NULL DEFAULT 'other'
+                         CHECK(role_category IN (
+                             'tech_lead',
+                             'hiring_manager',
+                             'hr',
+                             'other'
+                         )),
+    linkedin_url         TEXT    NOT NULL UNIQUE,
+    source               TEXT    NOT NULL DEFAULT 'web'
+                         CHECK(source IN ('web', 'linkedin')),
+    message_draft        TEXT,
+    status               TEXT    NOT NULL DEFAULT 'new'
+                         CHECK(status IN (
+                             'new',       -- найден, черновик ещё не сгенерирован
+                             'drafted',   -- сообщение сгенерировано, ждёт Denis'а
+                             'sent',      -- Denis отправил вручную из LinkedIn
+                             'replied',   -- получен ответ
+                             'skipped'    -- Denis решил не писать
+                         )),
+    fetched_at           TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+"""
+
 # Versioned migration list.
 # OCP: add new migrations at the end — never modify existing entries.
 # Each tuple: (version: int, sql: str)
@@ -162,6 +196,7 @@ _MIGRATIONS: list[tuple[int, str]] = [
     (11, _V11_ADD_NOTES),
     (12, _V12_ADD_EVENT_CATEGORY),
     (13, _V13_ADD_VACANCY_SCORE),
+    (14, _V14_OUTREACH_CONTACTS),
 ]
 
 

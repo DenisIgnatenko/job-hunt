@@ -1,16 +1,27 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
+  draftOutreachMessage,
   fetchCompanyReport,
   fetchMatchAnalysis,
   fetchVacancy,
+  findOutreachContacts,
   generateLetter,
   regenerateLetter,
   saveNotes,
+  updateOutreachStatus,
   updateVacancyStatus,
+  type OutreachContact,
   type VacancyDetail,
 } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
+
+const ROLE_LABELS: Record<string, string> = {
+  tech_lead:       '🧑‍💻 Tech lead',
+  hiring_manager:  '🧑‍💼 Hiring manager',
+  hr:              '👥 HR / Talent',
+  other:           '👤 Other',
+}
 
 // Доступные переходы из каждого статуса
 const _IN_PROGRESS_ACTIONS = [
@@ -58,6 +69,11 @@ export default function VacancyDetailPage() {
   const [regenComments, setRegenComments] = useState('')
   const [showRegen, setShowRegen] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
+  const [outreachContacts, setOutreachContacts] = useState<OutreachContact[]>([])
+  const [findingContacts, setFindingContacts] = useState(false)
+  const [draftingContactId, setDraftingContactId] = useState<number | null>(null)
+  const [editedDrafts, setEditedDrafts] = useState<Record<number, string>>({})
+  const [copiedContactId, setCopiedContactId] = useState<number | null>(null)
   const nav = useNavigate()
 
   useEffect(() => {
@@ -67,6 +83,7 @@ export default function VacancyDetailPage() {
       setCompanyReport(v.company_report)
       setMatchAnalysis(v.match_analysis)
       setNotes(v.notes ?? '')
+      setOutreachContacts(v.outreach_contacts)
       setLoading(false)
     })
   }, [id])
@@ -146,6 +163,44 @@ export default function VacancyDetailPage() {
     } finally {
       setRegenerating(false)
     }
+  }
+
+  // Outreach: находим людей в компании, черновик и статус — по каждому контакту отдельно.
+  // Тот же decoupled-паттерн, что у Cover letter (SRP): поиск не тянет за собой draft.
+  const handleFindContacts = async () => {
+    if (!vacancy?.id) return
+    setFindingContacts(true)
+    try {
+      const contacts = await findOutreachContacts(vacancy.id)
+      setOutreachContacts(contacts)
+    } finally {
+      setFindingContacts(false)
+    }
+  }
+
+  const handleDraftMessage = async (contactId: number) => {
+    setDraftingContactId(contactId)
+    try {
+      const { message } = await draftOutreachMessage(contactId)
+      setOutreachContacts(prev => prev.map(c =>
+        c.id === contactId ? { ...c, message_draft: message, status: 'drafted' } : c
+      ))
+      setEditedDrafts(prev => ({ ...prev, [contactId]: message }))
+    } finally {
+      setDraftingContactId(null)
+    }
+  }
+
+  const handleCopyMessage = (contactId: number) => {
+    const text = editedDrafts[contactId] ?? ''
+    navigator.clipboard.writeText(text)
+    setCopiedContactId(contactId)
+    setTimeout(() => setCopiedContactId(null), 2000)
+  }
+
+  const handleContactStatus = async (contactId: number, status: string) => {
+    await updateOutreachStatus(contactId, status)
+    setOutreachContacts(prev => prev.map(c => c.id === contactId ? { ...c, status } : c))
   }
 
   if (loading) return <div className="loading">Loading…</div>
@@ -343,6 +398,105 @@ export default function VacancyDetailPage() {
           !generatingLetter && (
             <div className="empty">No cover letter yet</div>
           )
+        )}
+      </section>
+
+      {/* Outreach — находим людей в компании, готовим черновик LinkedIn-сообщения.
+          Denis всегда отправляет сам из LinkedIn UI: здесь только Find + Draft + Copy,
+          никакой автоматической отправки. */}
+      <section className="section">
+        <div className="ai-section-header">
+          <h2>🤝 Outreach contacts</h2>
+          {outreachContacts.length === 0 && (
+            <button
+              className="btn btn-secondary"
+              disabled={findingContacts}
+              onClick={handleFindContacts}
+            >
+              {findingContacts ? '⏳ Searching…' : '🔍 Find contacts'}
+            </button>
+          )}
+        </div>
+        {findingContacts && (
+          <span className="generating-hint">
+            Searching public web + LinkedIn for tech leads / HR at this company — ~15 sec
+          </span>
+        )}
+
+        {outreachContacts.length === 0 ? (
+          !findingContacts && <div className="empty">No contacts found yet</div>
+        ) : (
+          <div className="outreach-list">
+            {outreachContacts.map(contact => (
+              <div key={contact.id} className="outreach-card">
+                <div className="outreach-card-header">
+                  <div>
+                    <strong>{contact.full_name}</strong>
+                    {contact.headline && <div className="muted">{contact.headline}</div>}
+                  </div>
+                  <div className="outreach-card-badges">
+                    <span className="badge badge-gray">
+                      {ROLE_LABELS[contact.role_category] ?? contact.role_category}
+                    </span>
+                    <StatusBadge value={contact.status} />
+                  </div>
+                </div>
+                <a
+                  href={contact.linkedin_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="apply-link"
+                >
+                  Open LinkedIn profile ↗
+                </a>
+
+                {contact.message_draft ? (
+                  <>
+                    <textarea
+                      className="notes-textarea"
+                      value={editedDrafts[contact.id] ?? contact.message_draft}
+                      onChange={e => setEditedDrafts(prev => ({ ...prev, [contact.id]: e.target.value }))}
+                      rows={3}
+                    />
+                    <div className="outreach-card-actions">
+                      <button className="btn btn-secondary" onClick={() => handleCopyMessage(contact.id)}>
+                        {copiedContactId === contact.id ? '✓ Copied' : '📋 Copy'}
+                      </button>
+                      <button className="override-toggle" onClick={() => handleDraftMessage(contact.id)}>
+                        🔄 Regenerate
+                      </button>
+                      {contact.status !== 'sent' && (
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => handleContactStatus(contact.id, 'sent')}
+                        >
+                          ✅ Mark sent
+                        </button>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="outreach-card-actions">
+                    <button
+                      className="btn btn-primary"
+                      disabled={draftingContactId === contact.id}
+                      onClick={() => handleDraftMessage(contact.id)}
+                    >
+                      {draftingContactId === contact.id ? '⏳ Drafting…' : '✍️ Draft message'}
+                    </button>
+                    {contact.status !== 'skipped' && (
+                      <button
+                        className="override-cancel"
+                        onClick={() => handleContactStatus(contact.id, 'skipped')}
+                      >
+                        ❌ Skip
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </section>
     </div>
