@@ -11,8 +11,7 @@ Vacancy + event scraping → AI scoring → company research → cover letter ge
 - python-telegram-bot 22.x — HITL notifications
 - APScheduler 3.x — CronTrigger (not IntervalTrigger), UTC
 - SQLite, sqlite3 stdlib (no ORM in the schema layer)
-- linkedin-api 2.3.x — LinkedIn via cookie auth (job search + outreach people search)
-- **ddgs** (formerly duckduckgo-search, renamed) — web search in ResearchAgent, EventScoutAgent, EntertainmentScoutAgent
+- **ddgs** (formerly duckduckgo-search, renamed) — web search in ResearchAgent, EventScoutAgent, EntertainmentScoutAgent, OutreachFinder
 - FastAPI + Uvicorn — dashboard API (port 8080)
 - React 18 + TypeScript + Vite — dashboard SPA
 - requests, python-dotenv, Axios
@@ -94,32 +93,36 @@ src/event_utils.py                is_past_event_date() — shared past-event fil
 src/agents/base_agent.py          BaseAgent: _chat() with prompt caching (cache_control: ephemeral)
 src/agents/voice.py               DENIS_VOICE (shared "voice" block for LetterAgent + OutreachAgent),
                                    extract_json_object(), has_dash() — see architectural decisions
-src/agents/scout_agent.py         ScoutAgent: title pre-filter + LLM scoring → ScoredVacancy
+src/agents/scout_agent.py         ScoutAgent: title pre-filter + LLM scoring → ScoredVacancy.
+                                   Candidate profile + location/scoring policy live here, hardcoded —
+                                   NOT read from resume.md (see architectural decisions)
 src/agents/research_agent.py      ResearchAgent: ddgs (3 queries) + LLM dossier
 src/agents/letter_agent.py        LetterAgent: cover letter in Denis's voice (180-230 words, no em dashes,
-                                   see "Denis's personality"), accepts user_comments for regeneration
+                                   see "Denis's personality"), accepts user_comments for regeneration.
+                                   Denis doesn't use this output himself — see below — but it's exercised
+                                   and kept correct since the dashboard/Telegram flows call it either way
 src/agents/event_scout_agent.py   EventScoutAgent: batch LLM scoring of tech events (category=professional)
 src/agents/entertainment_scout_agent.py  EntertainmentScoutAgent: batch LLM scoring of leisure events in Aarhus/Jutland (category=entertainment)
 src/agents/outreach_scout_agent.py  OutreachScoutAgent: batch LLM extraction + classification of people
                                      (tech_lead|hiring_manager|hr|other) from web search, confidence >= 6
-src/agents/outreach_agent.py      OutreachAgent: drafts a LinkedIn connection-request note
+src/agents/outreach_agent.py      OutreachAgent: drafts a short outreach note
                                    (200-260 chars, no dashes, always sent by Denis manually)
 
 src/scrapers/base_scraper.py        BaseScraper (ABC)
 src/scrapers/jobindex_scraper.py    Jobindex RSS, keyword search
-src/scrapers/linkedin_scraper.py    LinkedIn via cookie auth (li_at + JSESSIONID)
-src/scrapers/thehub_scraper.py      The Hub REST API v2, the main Danish tech job board
+src/scrapers/thehub_scraper.py       The Hub REST API v2, the main Danish tech job board
                                      (URL and description are assembled separately — see architectural decisions)
 src/scrapers/remotive_scraper.py    Remotive public API, remote-only jobs
 src/scrapers/eventbrite_scraper.py  Eventbrite HTML → JSON-LD parsing, no API key needed
 src/scrapers/event_scraper.py       ddgs search for tech events
 src/scrapers/entertainment_scraper.py  ddgs search for leisure events (concerts, festivals, theater)
-src/scrapers/outreach_finder.py     finds people at a company: ddgs (site:linkedin.com/in) first,
-                                     linkedin_api.search_people() as a fallback
+src/scrapers/outreach_finder.py     finds people at a company: public web search first,
+                                     a direct professional-network lookup as a fallback
 
 src/bot/telegram_bot.py           All Telegram UI (parse_mode="HTML" everywhere)
 src/scheduler/jobs.py             Job functions: scout_jobindex, scout_remotive, scout_thehub,
-                                   scout_linkedin, scout_events, scout_entertainment, run_research_for_vacancy
+                                   scout_events, scout_entertainment, run_research_for_vacancy
+                                   (plus one more per-source scout not listed individually here)
 
 dashboard/api/main.py             FastAPI app: run_migrations(), SPA catch-all, CORS, no docs
 dashboard/api/pipeline.py         run_research_pipeline(), regenerate_letter(),
@@ -146,6 +149,9 @@ dashboard/frontend/               React SPA (Vite build → dist/)
   src/components/Navbar.tsx       Dashboard | Vacancies | Events | 🎠 Entertainment
 ```
 
+*Note: this doc deliberately doesn't name every scraper/source by brand — see "Public-doc
+scrubbing" below. Read the actual files in `src/scrapers/` for the full, real list.*
+
 ## Database (SQLite)
 
 ### Table: vacancies
@@ -159,9 +165,11 @@ notes,                            ← V11 (TEXT, NULL — Denis's personal notes
 score                             ← V13 (INTEGER 1-10 from ScoutAgent, NULL for
                                      records predating the migration — badge in the dashboard)
 ```
-- `platform`: "jobindex" | "linkedin" | "thehub" | "remotive" | "unknown"
+- `platform`: a free-text string set per scraper (no DB-level CHECK constraint) — grep
+  `src/scrapers/*.py` for the current real list rather than trusting a hardcoded list here
 - `work_format`: "remote" | "hybrid" | "onsite" | "unknown"
-- `source_id`: sha1(url) for Jobindex, "li_{job_id}" for LinkedIn, "thehub_{id}", "remotive_{id}"
+- `source_id`: dedup key, format varies per source (e.g. sha1(url) for Jobindex, `"{source}_{id}"`
+  for API-based sources) — see each scraper's `_to_vacancy()`
 
 ### Table: community_events (V8)
 ```
@@ -180,11 +188,13 @@ role_category, linkedin_url (UNIQUE), source, message_draft,
 status, fetched_at
 ```
 - `role_category`: "tech_lead" | "hiring_manager" | "hr" | "other"
-- `source`: "web" (ddgs) | "linkedin" (search_people fallback)
+- `source`: "web" (public search) | a second value for the direct-lookup fallback
 - `status`: "new" | "drafted" | "sent" | "replied" | "skipped"
-- `linkedin_url` — dedup key, like `source_id` on vacancies / `url` on events
-- `sent` is set by Denis manually after he sends the message himself from LinkedIn —
-  there's nothing in this table resembling an "auto-sent" flag or timestamp
+- `linkedin_url` — real column name, dedup key (like `source_id` on vacancies / `url` on
+  events); named for the specific network it targets — see "Public-doc scrubbing" below for
+  why that's the one identifier in this doc still spelled out literally
+- `sent` is set by Denis manually after he sends the message himself — there's nothing in
+  this table resembling an "auto-sent" flag or timestamp
 
 ### Vacancy statuses (full lifecycle)
 ```
@@ -206,10 +216,11 @@ OCP: new migrations are appended only — existing ones are never edited.
 06:00 UTC = 08:00 CEST  Jobindex
 06:10 UTC = 08:10 CEST  Remotive
 06:20 UTC = 08:20 CEST  The Hub
-06:35 UTC = 08:35 CEST  LinkedIn      (slower — cookies + get_job() per vacancy)
 07:10 UTC = 09:10 CEST  Events        (Eventbrite HTML + ddgs + LLM, category=professional)
 07:30 UTC = 09:30 CEST  Entertainment (ddgs + LLM, category=entertainment, no Telegram)
 ```
+(One more per-source scout job runs in this window too — see `main.py` for the exact
+registration; not spelled out here, same reasoning as elsewhere in this doc.)
 Results are ready by 10:00 CEST. The overnight run doesn't wake Denis up.
 
 ## Telegram commands
@@ -220,12 +231,12 @@ Results are ready by 10:00 CEST. The overnight run doesn't wake Denis up.
 /jobindex     run Jobindex manually
 /remotive     run Remotive manually
 /thehub       run The Hub manually
-/linkedin     run LinkedIn manually
 /events       list events from the DB
 /scout_events run event scraping manually (Eventbrite + ddgs)
 /attended     mark an event as attended
 /help         help text
 ```
+(One more manual-trigger command exists for the per-source scout mentioned above.)
 
 ## Dashboard (http://3.75.175.202:8080 or localhost:8080)
 - HTTP Basic Auth (DASHBOARD_USER / DASHBOARD_PASSWORD)
@@ -241,9 +252,9 @@ Results are ready by 10:00 CEST. The overnight run doesn't wake Denis up.
   - "📝 My notes" — free-text textarea (PATCH /notes, stored in DB V11)
   - Job description (HTML or plain text via descriptionToHtml())
   - Letter versioning: v1, v2, v3... — iteration history kept in the DB
-  - **🤝 Outreach contacts section**: `🔍 Find contacts` (ddgs + LinkedIn fallback) → a card per
-    person (name, role, LinkedIn link) → `✍️ Draft message` → editable textarea →
-    `📋 Copy` → Denis sends it himself from LinkedIn → `✅ Mark sent`. No auto-send anywhere in the UI.
+  - **🤝 Outreach contacts section**: `🔍 Find contacts` (web search + a fallback lookup) → a card
+    per person (name, role, profile link) → `✍️ Draft message` → editable textarea →
+    `📋 Copy` → Denis sends it himself, by hand → `✅ Mark sent`. No auto-send anywhere in the UI.
 - AI sections (cached in DB V9/V10):
   - "Company report" — 3 ddgs queries + LLM (max_tokens=1400)
   - "Match analysis" — resume-to-vacancy comparison (max_tokens=1200)
@@ -253,7 +264,8 @@ Results are ready by 10:00 CEST. The overnight run doesn't wake Denis up.
 ```
 scraper.fetch()
   → title pre-filter (_is_tech_title) — no LLM, free
-  → [LinkedIn only] get_job() for titles that passed the filter (company, location, description)
+  → [one source only] a per-listing detail fetch for titles that passed the filter
+     (company, location, description)
   → ScoutAgent.run() → LLM scoring → ScoredVacancy(vacancy, score, reason, work_format, stack)
   → VacancyRepository.upsert() → (id, is_new)
   → is_new=True → notify_vacancy() on Telegram
@@ -292,16 +304,16 @@ Denis: status buttons on the Entertainment page
 ## Data flow (outreach)
 ```
 Denis on a vacancy card: [🔍 Find contacts]
-  → OutreachFinder.find(company): ddgs (site:linkedin.com/in, 2 query groups by role)
-     → if empty: linkedin_api.search_people() fallback, ONLY then, once
+  → OutreachFinder.find(company): public web search (2 query groups by role)
+     → if empty: a direct professional-network lookup fallback, ONLY then, once
   → OutreachScoutAgent.run(): a single batch LLM call, strict confidence >= 6 filter
-     (ddgs returns a lot of noise — unrelated people, stale positions; the model must
+     (search results are noisy — unrelated people, stale positions; the model must
      reject anything that isn't clearly "currently at this company, in a relevant role")
-  → OutreachContactRepository.upsert() → (id, is_new), dedup on linkedin_url
+  → OutreachContactRepository.upsert() → (id, is_new), dedup on profile URL
 Denis on a contact card: [✍️ Draft message]
-  → OutreachAgent.run(contact, vacancy) → LinkedIn connection-request note, 200-260 chars
+  → OutreachAgent.run(contact, vacancy) → a short connection-request note, 200-260 chars
   → save_message_draft() → status='drafted'
-Denis: edits in the textarea if needed → [📋 Copy] → pastes it and sends it HIMSELF from LinkedIn
+Denis: edits in the textarea if needed → [📋 Copy] → pastes it and sends it HIMSELF, by hand
   → [✅ Mark sent] → status='sent' (nothing is sent by the system automatically)
 ```
 
@@ -317,15 +329,62 @@ The event loop never blocks — Telegram polling keeps running.
 
 ### Pre-filter before the LLM
 `_is_tech_title()` in scout_agent.py filters out non-tech vacancies before calling Claude.
-LinkedIn: `get_job()` is only called for titles that pass the title filter.
+A per-listing detail fetch (for the one source that needs it) is only called for titles that
+pass the title filter.
 Saves roughly 80% of tokens on scoring.
 
-### Scout — location hard filter
-ScoutAgent applies location rules BEFORE scoring against the tech stack.
-Reject: onsite/hybrid outside Denmark; remote with any regional restriction (EU, EMEA, Europe, US, UK, etc.).
-Accept: Denmark only (any format) OR remote with no geographic restriction at all (worldwide/global/unspecified).
-"If in doubt — reject" is an explicit instruction in the prompt.
+### Scout — candidate profile and location hard filter (updated 2026-09-19)
+ScoutAgent's candidate profile, target roles, and location rules are a **hardcoded prompt
+in `scout_agent.py`, not read from `resume.md`** — see the dedicated entry below on why
+that split exists and why it matters.
+
+Location rules apply BEFORE scoring against the tech stack:
+- Reject: onsite/hybrid outside Denmark; remote with any regional restriction (EU, EMEA,
+  Europe, US, UK, etc.) — including EU/EMEA remote specifically, even though Denmark is
+  technically inside that scope. Denis has explicitly said he doesn't want these: a company
+  hiring broadly across a region rather than for Denmark specifically usually isn't building
+  local roots there, often runs on arrangements that skip Danish employment protections, and
+  doesn't advance the Danish-market career he's building. Also reject anything requiring a
+  security clearance he can't obtain.
+- Accept: anywhere in Denmark, any format (onsite/hybrid/remote, any city) — OR remote with
+  no geographic restriction at all (worldwide/global/unspecified).
+- "If in doubt — reject" is an explicit instruction in the prompt.
+
+Skill scoring (only if location is accepted): Java, TypeScript, Node.js, Python, AI/LLM
+engineering (RAG, agents, MCP), event-driven/Kafka, DDD/Clean Architecture are the strong
+signals; mid-level seniority bracket (roughly 2-5 years, not entry-level and not
+Staff/Principal). Contract/freelance/fixed-term roles are explicitly accepted, not
+penalized — nothing currently scrapes for these separately, but the agent no longer
+downranks them when they show up. Requiring fluent/native Danish, or a primary stack of
+C#/PHP/Go/Ruby with no production experience elsewhere, scores down rather than hard-rejects.
+
 Rejected vacancies get score=2, relevant=false — they never reach the notification stage.
+
+**JSON field order matters for self-consistency.** The response schema puts `"reason"`
+before `"score"`/`"relevant"` on purpose — earlier it was the reverse, and the model would
+occasionally commit to a score before it had finished reasoning, then contradict itself
+later in the reason text (e.g. `score: 2` with `relevant: true`, after "reason" rambled its
+way to a different conclusion). Reordering so the model reasons before it commits removed
+this class of bug in testing. Also bumped `max_tokens` from 128 to 256 for the scoring
+call — a more nuanced prompt produces longer justifications, and the old ceiling
+occasionally truncated mid-JSON and silently dropped a valid vacancy.
+
+### resume.md vs. scout_agent.py — don't assume the LLM reads what you think it reads (2026-09-19)
+`resume.md` is candidate facts, injected into LetterAgent/ResearchAgent/match-analysis via
+`BaseAgent._system_with_resume()`. It used to also carry a "Job Search Preferences" section
+(target stack, location boundaries, reject signals) written as if it fed the scoring logic.
+It didn't — `ScoutAgent` never calls `_system_with_resume()` at all; its candidate profile
+and location rules are a fully separate hardcoded prompt (see above). Editing resume.md's
+preferences section was doing nothing to scoring, silently, for as long as that section
+existed.
+Fixed by moving that content to scout_agent.py's own prompt (where it's now the source of
+truth for scoring) and keeping resume.md to actual resume content only (SRP: one file is
+candidate facts for writing/research, the other is scoring policy — mixing them meant the
+scoring policy was also getting injected as if it were candidate facts into agents that
+have no use for it). The two are kept in sync by hand; there's a comment in scout_agent.py
+pointing this out for whoever edits one and forgets the other.
+Lesson generalizes beyond this repo: "the agent has context" is a claim worth testing against
+the actual prompt-building code, not assumed from file proximity.
 
 ### Events — hard date filter
 `src/event_utils.py::is_past_event_date(event_date, today)` — a shared utility (DRY).
@@ -343,13 +402,17 @@ The entertainment job does NOT send Telegram notifications — it only writes to
 ### Description storage
 Scrapers store the full description, untruncated (the old [:2000] truncation was removed).
 ScoutAgent truncates to [:800] itself, only for its own LLM call.
-Frontend: descriptionToHtml() — if there are no HTML tags (LinkedIn, Remotive), converts \n\n into <p>.
+Frontend: descriptionToHtml() — if a given source's description has no HTML tags, converts \n\n into <p>.
 
 ### LetterAgent — decoupled from "Take to work"
 `⚙️ Take to work` → just `updateVacancyStatus(id, 'in_progress')` (instant).
 `✨ Generate cover letter` — a separate button in the letter section, triggers the AI pipeline (~20 sec).
 `📤 Mark applied` can be clicked without ever generating a letter — nothing blocks it.
 Same pattern as the Company report and Match analysis sections (SRP).
+In practice Denis doesn't use the generated letter as output — he writes every letter
+himself, using the company dossier as material — but the generator stays exercised and
+correct since dashboard/Telegram flows still call it, and regeneration-with-feedback is a
+real, tested feature.
 
 ### LetterAgent — regeneration with feedback
 `LetterAgent.run(vacancy, company, user_comments)` — user_comments is appended to the prompt.
@@ -387,19 +450,20 @@ otherwise the 401 interceptor would trigger a reload before the catch block coul
 A new scraper is a new class inheriting `BaseScraper`.
 Existing code doesn't change (jobs.py picks up a new scraper via an import + add_job).
 
-### Outreach — LinkedIn draft-only, no auto-send (added 2026-09-14)
-`linkedin_api` (already a project dependency, already used for job scraping) technically supports
-`search_people`, `get_profile`, `add_connection`, `send_message` — full automation is possible.
-Deliberately not doing it: LinkedIn's Automation Policy explicitly bans scripted messaging and
-connection requests, and it's actively detected. Current usage (job scraping via cookie auth) is
-already a gray area Denis accepts; auto-sending from a personal account is a materially different
-risk — an account restriction would hit right in the middle of active job searching, which is
-worse than losing one vacancy source.
-Resolution: the system finds people and prepares a draft; Denis copies it and sends it himself
-from the LinkedIn UI. There is no `send_message()` or `add_connection()` call anywhere in the code.
-Contact sourcing: ddgs (public web search, doesn't touch the LinkedIn session) first,
-`search_people()` as a fallback, and only once per "Find contacts" click (not scheduled, not
-batched) — LinkedIn-side activity stays low and human-paced.
+### Outreach — draft-only, no auto-send (added 2026-09-14)
+The library used for the professional-network lookup technically supports sending messages
+and connection requests programmatically — full automation is possible. Deliberately not
+doing it: that platform's automation policy explicitly bans scripted messaging and
+connection requests, and it's actively detected. The existing scraping usage elsewhere in
+this project is already a gray area Denis accepts; auto-sending from a personal account is
+a materially different risk — an account restriction would hit right in the middle of
+active job searching, which is worse than losing one vacancy source.
+Resolution: the system finds people and prepares a draft; Denis copies it and sends it
+himself, by hand. There is no method call anywhere in the code that sends a message or a
+connection request on his behalf.
+Contact sourcing: public web search (doesn't touch any authenticated session) first, a
+direct lookup as a fallback, and only once per "Find contacts" click (not scheduled, not
+batched) — activity on that platform stays low and human-paced.
 
 ### DENIS_VOICE — shared "voice" module (DRY)
 `src/agents/voice.py` — the "who Denis is" block plus the dash ban, extracted out of
@@ -429,9 +493,9 @@ shape is the same, but `absoluteJobUrl` and `description` disappeared:
   links on the listing page)
 - `description` is fetched with a separate request to the job's detail page — it has JSON-LD
   (`schema.org JobPosting`), the same technique `EventbriteScraper` uses for events
-- Enrichment only runs for vacancies that pass `_is_tech_title()` — same pattern as
-  `LinkedInScraper._enrich_descriptions()`, to avoid spending extra requests on vacancies that
-  are clearly irrelevant anyway
+- Enrichment only runs for vacancies that pass `_is_tech_title()` — same pattern already used
+  for another source's per-listing detail enrichment, to avoid spending extra requests on
+  vacancies that are clearly irrelevant anyway
 - The attribute order in the `<script>` tag on TheHub's pages is non-standard (`data-hid` comes
   before `type`) — the regex isn't order-dependent, it matches any `ld+json` block and checks
   `@type` after `json.loads()`
@@ -448,6 +512,27 @@ button — it had been silently broken in production. Found while adding the out
 the same file: `find_outreach_contacts()` wouldn't have worked either without fixing this import
 first.
 
+### Public-doc scrubbing (2026-09-19)
+This repo is public and gets linked from Denis's own posts about it, so this doc and
+README.md deliberately don't name one specific job board/professional-network source by
+brand, even though the code obviously does (file and column names still say what they say —
+this is documentation hygiene, not security). The reasoning, if you're reading this to
+understand why a source is described vaguely: publishing a detailed "here's how we scrape
+this platform via an unofficial cookie-based session, and here's why we don't also
+auto-message people on it" writeup, on a channel connected to Denis's own account on that
+same platform, is a real, avoidable risk — that platform's own automation policy is the
+subject of the "Outreach — draft-only" entry above, and self-reporting the mechanism in
+public doesn't help him.
+Practical effect on this doc: prose, schedule rows, command lists, and file-tree entries
+that would name the specific source are genericized or omitted. The one exception is the
+`linkedin_url` column name in the `outreach_contacts` schema — changing what's documented
+there without changing the actual DDL would just make this doc wrong, so it's left literal.
+If you're Claude Code working on this repo: the real file names, class names, and env vars
+still say what they say — read the actual source under `src/scrapers/` and `.env.example`
+rather than treating this doc as the complete picture. This doc's job here is to flag *that*
+a source is downplayed and *why*, not to hide it from a coding session that can just read
+the files anyway.
+
 ## .env variables
 ```
 ANTHROPIC_API_KEY
@@ -458,15 +543,12 @@ DATABASE_URL=sqlite:///job_hunt.db
 SCOUT_INTERVAL_HOURS=6
 JOBINDEX_KEYWORDS=Java developer,Go developer,Golang,Node.js backend,Spring Boot,Fullstack developer,Backend engineer,Softwareudvikler
 JOBINDEX_LOCATION=
-LINKEDIN_EMAIL
-LINKEDIN_PASSWORD
-LINKEDIN_COOKIE=<li_at cookie>
-LINKEDIN_JSESSIONID=<JSESSIONID cookie>
-LINKEDIN_INTERVAL_HOURS=12
 DASHBOARD_USER=denis
 DASHBOARD_PASSWORD=<secret>
 RESUME_PATH=resume.md
 ```
+(A few more source-specific credential variables exist for the deliberately-unnamed source
+above — see the actual `.env.example` / `src/config.py` for the complete list.)
 
 ## Denis's personality (for letter_agent)
 Open, warm, empathetic. An introvert who's good at communicating (it costs him energy).
@@ -474,8 +556,11 @@ His humor is dry and understated, closer to Danish humor than American enthusias
 never forced. He's lived in Aarhus long enough to have opinions about flat hierarchies and
 Danish directness — but that's background texture, not a running joke in every letter. His
 YouTube channel @midlifecode (1300+ subscribers) comes up when it's relevant, not as a stock
-fact. Open to relocating anywhere — no drama, stated plainly ("happy to relocate", not "would
-need some conversation"). Memorable, vivid. Letters should read like an actual message to a
+fact. Open to relocating anywhere in Denmark — no drama, stated plainly ("happy to relocate",
+not "would need some conversation"); this is scoped to Denmark specifically, not worldwide —
+ScoutAgent's location filter already only ever passes Danish or fully-unrestricted-remote
+postings through to LetterAgent, so "anywhere" in the letter prompt was never actually broader
+than that in practice. Memorable, vivid. Letters should read like an actual message to a
 person, not an essay written to impress.
 
 **2026-09-04 — rewrote the prompt (`src/agents/letter_agent.py`).** LetterAgent used to produce
@@ -490,7 +575,7 @@ instruction in the prompt didn't work — there was no humor at all. What change
 - The prompt now lists the specific clichés observed as things to avoid — an abstract instruction
   about tone didn't work, concrete examples of bad phrasing did
 - Relocation: used to be "only mention it if the location is ambiguous" → now stated plainly and
-  confidently, since Denis is genuinely open to relocating anywhere
+  confidently, since Denis is genuinely open to relocating anywhere in Denmark
 
 ## Not yet implemented (possible next steps)
 - Indeed scraper
@@ -498,8 +583,8 @@ instruction in the prompt didn't work — there was no humor at all. What change
 - Meetup RSS (not available without a Pro subscription)
 - Break dashboard stats down by event category (currently all events are counted together)
 - Email outreach (deliberately deferred — sourcing personal email addresses is noticeably more
-  GDPR-sensitive than surfacing public LinkedIn profiles via ddgs; revisit separately if the
-  LinkedIn draft flow proves useful)
+  GDPR-sensitive than surfacing public profiles via web search; revisit separately if the
+  current draft flow proves useful)
 - Telegram notifications for outreach (dashboard-only for now, following the Entertainment
   precedent — adding a notify_* call would be trivial if push notifications for new contacts
   are wanted)

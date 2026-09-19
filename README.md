@@ -4,13 +4,13 @@ A personal automation system that scrapes job postings and local events, scores 
 
 ## What it does
 
-1. **Scrapes** job boards every morning (Jobindex, LinkedIn, The Hub, Remotive)
+1. **Scrapes** job boards every morning (Jobindex, The Hub, Remotive)
 2. **Scores** each vacancy with Claude — checks location fit, tech stack match, and remote policy
 3. **Notifies** me in Telegram with a score and reason; I tap "Take to work" or "Skip"
-4. **Researches** the company and **writes a cover letter** tailored to my style on demand
+4. **Researches** the company on demand (a cover-letter draft is available too, though I mostly write my own)
 5. **Tracks** applications through the full lifecycle (applied → interview → offer)
 6. **Finds events** — both professional tech meetups and entertainment (concerts, festivals) in Aarhus and Jutland
-7. **Finds people worth reaching out to** — tech leads and HR at a company I'm interested in — and drafts a short LinkedIn connection note. I always review it and send it myself; nothing is sent automatically.
+7. **Finds people worth reaching out to** at a company I'm interested in, and drafts a short connection note for a professional network. I always review it and send it myself; nothing is sent automatically.
 
 Everything is visible in a web dashboard with filters, AI reports, and personal notes per vacancy.
 
@@ -27,7 +27,7 @@ Everything is visible in a web dashboard with filters, AI reports, and personal 
          ┌──────────────────▼──────────────────┐
          │            Scheduler (APScheduler)   │
          │  08:00 Jobindex  08:10 Remotive      │
-         │  08:20 The Hub   08:35 LinkedIn       │
+         │  08:20 The Hub                        │
          │  09:10 Tech events  09:30 Fun events  │
          └──────────────────┬──────────────────┘
                             │
@@ -67,7 +67,6 @@ Everything is visible in a web dashboard with filters, AI reports, and personal 
 | Scheduler | APScheduler 3.x (CronTrigger, UTC) |
 | Database | SQLite via stdlib sqlite3 (no ORM) |
 | Web search | ddgs (DuckDuckGo, no API key) |
-| LinkedIn | linkedin-api 2.3.x (cookie auth) — job scraping + outreach people search |
 | Backend API | FastAPI + Uvicorn (port 8080) |
 | Frontend | React 18 + TypeScript + Vite |
 | Deployment | EC2 t2.micro + GitHub Actions |
@@ -81,7 +80,6 @@ Each scraper is an independent class inheriting `BaseScraper` (Open/Closed Princ
 | Source | Method | Notes |
 |---|---|---|
 | **Jobindex** | RSS feed | Danish job board, per-keyword queries |
-| **LinkedIn** | Cookie auth (`li_at` + `JSESSIONID`) | `get_job()` called only for titles that pass pre-filter |
 | **The Hub** | REST API v2 | Main Danish tech job board; description fetched from the detail page's JSON-LD |
 | **Remotive** | Public API | Remote-only international jobs |
 | **Eventbrite** | HTML → JSON-LD parsing | No API key needed |
@@ -109,9 +107,9 @@ Triggered manually when I tap "Take to work" in Telegram or click "Generate cove
 1. **ResearchAgent** — runs 3 DuckDuckGo queries about the company, builds a dossier with Claude
 2. **LetterAgent** — writes a cover letter using my resume + dossier + job description
 
-The letter is meant to sound like me, not like an AI wrote a cover letter: 180-230 words, no em dashes (the single biggest tell that AI wrote something), one real anecdote instead of a résumé recap, dry understated humor when it genuinely fits. A code-level check re-scans the output for a stray dash and retries once if it finds one — the prompt rule alone doesn't guarantee compliance. Letters can be regenerated with feedback ("make the opening more specific", "mention Go experience more", etc.). Each regeneration saves as v2, v3... — history is kept in the DB.
+The letter is tuned to sound like me, not like an AI wrote a cover letter: 180-230 words, no em dashes (the single biggest tell that AI wrote something), one real anecdote instead of a résumé recap, dry understated humor when it genuinely fits. A code-level check re-scans the output for a stray dash and retries once if it finds one — the prompt rule alone doesn't guarantee compliance. Letters can be regenerated with feedback ("make the opening more specific", "mention Go experience more", etc.). Each regeneration saves as v2, v3... — history is kept in the DB.
 
-**Important:** "Take to work" and "Generate cover letter" are decoupled. Clicking "Take to work" just changes the status instantly. The AI pipeline runs separately on demand. You can mark a job as applied without ever generating a letter.
+In practice I don't use this part of the output. I write every cover letter myself, using the company dossier as raw material — deciding what to say about myself to a company I want to work for isn't a step I want to hand off. The generator stays in the codebase because it was worth building and tuning properly, and because "Take to work" and "Generate cover letter" are fully decoupled anyway: clicking "Take to work" just changes the status instantly, the AI pipeline runs separately on demand, and a job can be marked applied without ever touching either.
 
 ### Event scouting
 
@@ -133,11 +131,11 @@ Both agents receive today's date explicitly in the prompt (since the system prom
 
 Not every good opportunity is a listed vacancy — sometimes the useful move is finding the right person at a company and asking a genuine question. Triggered from a vacancy's detail page with "🔍 Find contacts":
 
-1. **OutreachFinder** — searches ddgs (`site:linkedin.com/in`, two query groups: tech leadership and HR/talent) for people at that company; falls back to `linkedin_api.search_people()` only if ddgs returns nothing, and only once per click
-2. **OutreachScoutAgent** — one batch LLM call classifies each hit as `tech_lead` / `hiring_manager` / `hr` / `other` and scores confidence; ddgs results are noisy (unrelated people, stale job history), so anything under confidence 6 is dropped
-3. **OutreachAgent** — drafts a 200-260 character LinkedIn connection-request note: one concrete reason for reaching out, framed as a genuine question about openings, never a pitch
+1. **OutreachFinder** — searches the public web (two query groups: tech leadership and HR/talent) for people at that company on a professional network; falls back to a direct network lookup only if the web search returns nothing, and only once per click
+2. **OutreachScoutAgent** — one batch LLM call classifies each hit as `tech_lead` / `hiring_manager` / `hr` / `other` and scores confidence; web search results are noisy (unrelated people, stale job history), so anything under confidence 6 is dropped
+3. **OutreachAgent** — drafts a 200-260 character connection-request note: one concrete reason for reaching out, framed as a genuine question about openings, never a pitch
 
-**I always send it myself.** `linkedin-api` technically supports sending messages and connection requests programmatically, but LinkedIn's automation policy explicitly bans that and actively detects it — an account restriction while actively job hunting would be far worse than losing a scraper source. So the system only ever prepares a draft; there's no `send_message()` or `add_connection()` call anywhere in the codebase. I copy the note, open the profile, and send it myself from the LinkedIn UI.
+**I always send it myself.** The library used for the network lookup technically supports sending messages and connection requests programmatically, but the platform's automation policy explicitly bans that and actively detects it — an account restriction while actively job hunting would be far worse than losing a scraper source. So the system only ever prepares a draft; nothing that sends a message or a connection request exists anywhere in the codebase. I copy the note and send it myself, by hand.
 
 ---
 
@@ -149,7 +147,7 @@ Not every good opportunity is a listed vacancy — sometimes the useful move is 
 |---|---|
 | `source_id` | Unique per scraper (sha1 of URL, `li_job_id`, etc.) |
 | `status` | `new → in_progress → letter_sent → applied → interview → offer → rejected → rejected_by_company` |
-| `platform` | jobindex / linkedin / thehub / remotive |
+| `platform` | e.g. jobindex, thehub, remotive |
 | `work_format` | remote / hybrid / onsite |
 | `score` | ScoutAgent's 1-10 score, shown as a badge in the dashboard (V13) |
 | `company_report` | Cached AI company dossier (V9) |
@@ -172,8 +170,8 @@ Not every good opportunity is a listed vacancy — sometimes the useful move is 
 |---|---|
 | `vacancy_id` | Which tracked vacancy prompted this search |
 | `role_category` | tech_lead / hiring_manager / hr / other |
-| `linkedin_url` | Unique — dedup key, like `source_id` on vacancies |
-| `source` | web (ddgs) / linkedin (search_people fallback) |
+| profile link | Unique — dedup key, like `source_id` on vacancies |
+| `source` | web (public search) / direct (network lookup fallback) |
 | `message_draft` | The AI-drafted note, editable before sending |
 | `status` | `new → drafted → sent → replied` (or `skipped`) — `sent` is set by hand, after I actually send it |
 
@@ -237,16 +235,15 @@ src/
     event_scout_agent.py             Professional event scoring
     entertainment_scout_agent.py     Entertainment event scoring
     outreach_scout_agent.py          Extracts and classifies people from search results
-    outreach_agent.py                Drafts LinkedIn connection-request notes
+    outreach_agent.py                Drafts short outreach notes
   scrapers/
     jobindex_scraper.py
-    linkedin_scraper.py
     thehub_scraper.py
     remotive_scraper.py
     eventbrite_scraper.py
     event_scraper.py                 DuckDuckGo for tech events
     entertainment_scraper.py         DuckDuckGo for entertainment events
-    outreach_finder.py               DuckDuckGo + LinkedIn people search
+    outreach_finder.py               DuckDuckGo + professional-network lookup
   bot/
     telegram_bot.py                  All Telegram UI
   scheduler/
@@ -289,7 +286,7 @@ dashboard/
 
 **An instruction isn't a guarantee — code checks too.** Telling the model "never use a dash" cut dash usage a lot, but not to zero: it still echoed one straight out of a quoted job title, and occasionally invented one of its own. A small code-level check scans the output and retries once with a pointed correction if a dash slipped through — the same instruct-and-verify pattern already used for filtering past events.
 
-**Outreach is draft-only by design, not by accident.** The LinkedIn library in use can technically send messages and connection requests on its own. That's deliberately unused: LinkedIn's automation policy bans it and actively detects it, and a restricted account is a real cost during an active job search. The system's job ends at preparing a good draft; a human sends it.
+**Outreach is draft-only by design, not by accident.** The library used to look people up can technically send messages and connection requests on its own. That's deliberately unused: the platform's own automation policy bans it and actively detects it, and a restricted account is a real cost during an active job search. The system's job ends at preparing a good draft; a human sends it.
 
 **SPA routing.** FastAPI serves `/assets` as static files (with proper cache headers). A catch-all `/{full_path:path}` route returns `index.html` for everything else. `StaticFiles(html=True)` mounted at `/` doesn't work for browser refresh on deep routes like `/vacancies/42`.
 
