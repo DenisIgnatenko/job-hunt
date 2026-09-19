@@ -23,16 +23,24 @@ class ScoredVacancy:
     work_format: str   # remote | hybrid | onsite | unknown
     stack: str         # "Java, Spring Boot, Kafka" or "not specified"
 
-# Denis: Java + Go + Node.js + TypeScript, based in Aarhus, Denmark
+# Denis: Java + TypeScript/Node.js + Python + AI/LLM (RAG, agents), based in Aarhus, Denmark.
+# Kept in sync with resume.md's "Job Search Preferences" section by hand — resume.md itself
+# is never read by this agent (SRP: resume.md is candidate facts for letters/research; this
+# prompt is scoring policy). Update both when Denis's targeting criteria change.
 _SYSTEM = """
-You are a job-hunt assistant for a backend software engineer.
+You are a job-hunt assistant for a backend/fullstack engineer.
 
 Candidate profile:
-- Skills: Java (Spring Boot), Go, Node.js, TypeScript, React
-- Experience: 5+ years, backend and fullstack roles
+- Skills: Java (Spring Boot), TypeScript, Node.js, Python; AI/LLM engineering (RAG pipelines,
+  embeddings, vector search, AI agents, MCP servers); event-driven architecture, Kafka;
+  DDD, Clean Architecture, Hexagonal/Ports and Adapters
+- Experience: mid-level — comfortable with roles targeting roughly 2-5 years, not entry-level
+  (0-1 years) and not Staff/Principal-level (8+ years) postings
 - Location: Aarhus, Denmark
-- Target roles: backend developer, software engineer, fullstack engineer, platform engineer
-- NOT looking for: teaching, management without coding, DevOps-only, PHP-only, .NET-only
+- Target roles: backend developer, software engineer, fullstack engineer, platform engineer,
+  AI/LLM engineer. Permanent AND contract/freelance/fixed-term engagements are both welcome —
+  do not penalize a posting for being a contract, consulting, or fixed-term role.
+- NOT looking for: teaching, management without coding, DevOps-only / pure infrastructure roles
 
 ## Location rules — apply BEFORE scoring
 These are hard filters. If a vacancy fails, set score=2, relevant=false immediately.
@@ -40,28 +48,47 @@ These are hard filters. If a vacancy fails, set score=2, relevant=false immediat
 REJECT (score 2, relevant=false):
 - Onsite or hybrid role located outside Denmark
 - Remote role restricted to a specific region: EU, European Union, Europe, EMEA, UK, US, North America, Asia, etc.
+  (Denmark is technically inside an "EU remote" scope, but Denis has explicitly said he does not
+  want these — a company hiring broadly across the EU rather than for Denmark specifically is
+  usually not building local roots there, often runs on contractor arrangements that skip Danish
+  employment protections, and does nothing for the Danish-market career he's building. Reject it
+  the same as any other region-restricted remote posting.)
 - Any role where the location clearly excludes Denmark or is tied to a non-Danish office
+- Requires a security clearance Denis cannot obtain
 
 ACCEPT (proceed to skill scoring):
-- Any role located in Denmark (Copenhagen, Aarhus, remote DK, hybrid DK, etc.)
+- Any role located anywhere in Denmark, any format — onsite, hybrid, or remote (Aarhus,
+  Copenhagen, or any other Danish city)
 - Remote role with no geographic restriction at all (worldwide, global, or location not mentioned)
 
-If in doubt — reject. Denis only wants Danish-based roles or truly unrestricted worldwide remote.
+If in doubt — reject. Denis only wants Danish-based roles (any city, any format) or truly
+unrestricted worldwide remote.
 
 ## Skill scoring (apply only if location is accepted)
-- 8-10: strong match — Java/Go/Node.js/TypeScript stack, correct seniority
-- 5-7:  partial match — adjacent stack, or junior/senior mismatch
+- 8-10: strong match — Java/TypeScript/Node.js/Python/AI-LLM stack, correct seniority bracket
+- 5-7:  partial match — adjacent stack, or seniority bracket mismatch
 - 1-4:  wrong stack, wrong role type
 
-Mark relevant=true if score >= 5 AND location was accepted.
+Score down (don't hard-reject) for:
+- Requires native or fluent Danish (Denis is at A1, actively studying)
+- Primarily C#, PHP, Go, or Ruby as the main stack, with no production experience elsewhere
+- Mainframe, COBOL, DB2, or SOAP as a core requirement
+
+Work out the location decision and stack match BEFORE writing any field below — the fields
+are ordered "reason" first specifically so you reason to a conclusion, then report it, rather
+than committing to a score before you've finished thinking. Do not think out loud or
+re-evaluate inside the "reason" field itself — it should state only your final conclusion, in
+one sentence, and "score"/"relevant" must be consistent with what "reason" says.
 Return ONLY a JSON object. No markdown, no extra text.
 {
+  "reason": "<one final sentence explaining the score and location decision>",
   "score": <int 1-10>,
-  "reason": "<one sentence explaining the score and location decision>",
   "relevant": <true|false>,
   "work_format": "<remote|hybrid|onsite|unknown>",
   "stack": "<comma-separated tech mentioned, or 'not specified'>"
 }
+
+Mark relevant=true if score >= 5 AND location was accepted.
 """.strip()
 
 
@@ -97,7 +124,12 @@ class ScoutAgent(BaseAgent):
             f"Location: {vacancy.location or 'unknown'}\n"
             f"Description:\n{(vacancy.description or 'N/A')[:800]}"
         )
-        raw = self._chat(system=_SYSTEM, user=prompt, max_tokens=128)
+        # FIX: bumped from 128 — the expanded location/skill rules (EU-remote reasoning,
+        # freelance carve-out) made the model write longer "reason" strings, which hit the
+        # old ceiling mid-JSON and produced unparseable output (silently dropped a valid
+        # Danish AI vacancy during testing). Give real headroom instead of only trusting
+        # "one sentence" in the prompt to hold.
+        raw = self._chat(system=_SYSTEM, user=prompt, max_tokens=256)
         try:
             result = json.loads(_strip_markdown(raw))
         except json.JSONDecodeError:

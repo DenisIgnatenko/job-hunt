@@ -1,88 +1,93 @@
-# Denis Ignatenko - Backend Software Engineer
+# Denis Ignatenko — Backend / Fullstack / AI Engineer
 
-**Location:** Aarhus, Denmark (work permit held)
-**Phone:** +45 91 47 44 16
-**Email:** denis.ignatenko.dev@gmail.com
-**LinkedIn:** https://www.linkedin.com/in/denisignatenko/
-**GitHub:** https://github.com/denisIgnatenko/
+## Location & Availability
+- Based in: Aarhus, Denmark
+- Open to: Aarhus (preferred), Copenhagen (open to relocation), remote
+- Work authorization: Danish work permit (accompanying spouse of Aarhus University PhD researcher)
+- Available: Immediately
+- Working language: English (C1). Danish: A1, actively studying. Russian: native.
 
-## Summary
+## Contact
+- Email: denis.ignatenko.dev@gmail.com
+- Phone: +45 91 47 44 16
+- LinkedIn: linkedin.com/in/denisignatenko
+- GitHub: github.com/denisIgnatenko
 
-Backend software engineer with hands-on experience in Java and Spring Boot,
-building and deploying microservice-based applications. Skilled in designing
-REST APIs, working with PostgreSQL, Redis, and message-based architectures,
-and delivering production-ready solutions using Docker and CI/CD pipelines.
-Experienced in distributed international team collaboration and Agile/Scrum
-environments. Open to opportunities in Denmark (remote or onsite).
+---
 
-## Skills
+## Technical Skills
 
-**Backend:** Java, Spring Boot, Node.js, TypeScript, Microservices, REST APIs,
-PostgreSQL, Redis, MongoDB, ClickHouse, Pub/Sub Messaging
+**Backend:** Java, Spring Boot, JUnit, TypeScript, Node.js, NestJS, Python, FastAPI, REST APIs, Microservices, Kafka, event-driven architecture, CQRS, Sagas, async/queue-based systems, idempotent processing
 
-**Frontend:** TypeScript, React, HTML5, SASS/SCSS, C#/.NET
+**Frontend:** React, TypeScript, Redux Toolkit, HTML5, SASS/SCSS
 
-**DevOps & Cloud:** Docker, CI/CD, AWS S3, Git
+**Databases:** PostgreSQL, Redis, MongoDB, ClickHouse, pgvector (vector search), SQLite, MySQL
 
-**Practices:** Clean Architecture, SOLID, API Design, Unit & Integration Testing,
-Test Automation, Agile/Scrum, Swagger/OpenAPI
+**Cloud & DevOps:** AWS (EC2, S3, ECS), Docker, CI/CD, GitHub Actions, Git, Terraform (familiar), Kubernetes (in progress, CKA)
 
-## Professional Experience
+**AI & LLM:** Claude API, Claude Code, LangChain4j, RAG pipelines, embeddings, vector search, AI agents, agentic loops, MCP servers, prompt orchestration, semantic search
 
-### CorporationX (September 2024 - April 2026) - Remote
-*Java microservices project for software developers social network*
-**Backend Software Engineer**
+**Architecture:** Domain-Driven Design (DDD), Clean Architecture, Ports and Adapters (Hexagonal), SOLID, API Design, Swagger/OpenAPI
 
-- Built a real-time News Feed service with Kafka-based fan-out, Redis caching,
-  and idempotent event processing. Optimized feed read performance and implemented
-  cache-warming and TTL strategies for high-throughput production use.
-- Developed a URL Shortener Service processing 50K+ unique links per month,
-  built as a modular Spring Boot microservice with efficient hash generation
-  and background job scheduling.
-- Developed RESTful APIs using the controller-service-repository pattern,
-  following Clean Architecture and SOLID principles.
-- Integrated Redis for caching and pub/sub messaging; optimized PostgreSQL
-  queries for high-performance data storage and retrieval.
-- Applied unit testing and API documentation practices (Swagger/OpenAPI).
+**Testing:** Unit testing, integration testing, automated testing, test-driven development
 
-### Texel (May 2023 - September 2024) - London, UK
-*DeepTech startup in 3D scanning, machine learning and virtual fitting*
-**Fullstack Software Developer**
+---
 
-- Designed and implemented backend API endpoints for AI Stylist to expose
-  garment and body-shape data to dashboards and client-facing applications.
-- Integrated ClickHouse to aggregate scan session and conversion data.
-- Developed Node.js scripts to parse and import partner store product feeds,
-  storing metadata and images in MongoDB and AWS S3.
-- Built and maintained React + TypeScript UI components for virtual fitting
-  room kiosks and the Shopify plugin.
+## Experience
 
-### HSE Researchers Group (June 2022 - May 2023) - Remote
-*Learning management system for online course delivery*
-**Fullstack Web Developer**
+### Job Hunt Automation Platform (Personal Project) — Sep 2025 to Present
+*Production job search automation system. Python, FastAPI, React/TypeScript, Claude API, SQLite, AWS EC2, GitHub Actions.*
+- Multi-source scraper aggregating vacancies from 4 job boards (Jobindex, The Hub, Remotive, RSS feeds) using Python and asyncio
+- AI scoring pipeline: keyword pre-filter before LLM call reduces token cost ~80%; ScoutAgent scores location fit, tech stack match, remote policy
+- Human-in-the-loop Telegram bot: vacancy cards with accept/skip actions; ResearchAgent builds company dossier; LetterAgent generates cover letter drafts on demand
+- Web dashboard (FastAPI + React/TypeScript): vacancy pipeline, status tracking, AI match analysis, personal notes
+- Deployed on AWS EC2 with GitHub Actions CI/CD; two systemd services running independently
+- 373+ vacancies processed to date
 
-- Developed an MVP LMS with role-based access and paid enrollment using
-  Node.js/PostgreSQL backend with REST APIs and a React/Redux frontend.
-- Implemented JWT-based authentication and session management.
-- Mentored 3 junior specialists in code quality and feature delivery.
+### Backend Software Engineer — CorporationX, Sep 2024 to Jun 2026 (remote)
+*Java microservices platform for a software developers' social network.*
+- Built ai-content-service: Spring Boot microservice with LangChain4j agent framework, pgvector RAG pipeline, Kafka-driven auto-embedding and SSE streaming
+- Built real-time News Feed: Kafka fan-out, Redis caching, idempotent event processing, cache-warming and TTL strategies for high-throughput production use
+- Designed RESTful APIs following Clean Architecture and SOLID; documented with Swagger/OpenAPI; covered with JUnit unit and integration tests
+- Built URL Shortener Service: 50K+ unique links/month, concurrent request handling, efficient hash generation
+- Used Claude Code throughout for code generation, debugging, QA; applied critical judgement to all AI output before merging
 
-### Lobotryasi Coffee Roasters (June 2020 - June 2022) - Moscow, Russia
-*Subscription e-commerce system*
-**Technical Product Owner**
+### Technical Due Diligence Audit — Fableau / KOT Platform, Jan 2026 to Apr 2026 (remote, freelance)
+*Audit of 18 repositories (fableau.com + knigaotebe.ru) for a digital book/content platform.*
+- Mapped third-party dependencies and integration points across the codebase
+- Identified critical security gaps and data-handling risks
+- Produced technical documentation and handover report for new engineering team
 
-- Managed end-to-end delivery of a subscription-based e-commerce platform.
-- Defined and prioritized requirements for backend (Node.js) and frontend (React) teams.
-- Coordinated cross-functional work between backend, frontend, design, and QA.
+### Fullstack Software Developer — Texel, May 2023 to Sep 2024 (London, UK, remote)
+*DeepTech SaaS startup in 3D scanning, ML and virtual fitting technologies.*
+- Designed and implemented per-vendor custom product-feed integration services; AI-enrichment of feed data (description standardisation, unit conversion for size charts)
+- Built Node.js backend API endpoints exposing garment and body-shape data to internal dashboards and client-facing applications
+- Integrated ClickHouse for product analytics; built async telemetry pipeline across Smart Mirror installations
+- Built reusable React + TypeScript UI components for virtual fitting room kiosks (Chrome kiosk mode) and Shopify plugin
+- Worked directly with partner brands on API integrations: understood real needs, debugged production issues when external systems behaved unexpectedly
+
+### Fullstack Web Developer — HSE Researchers Group, Jun 2022 to May 2023 (remote)
+*Learning management system for online course delivery.*
+- Delivered MVP LMS with role-based access and paid enrolment: Node.js/PostgreSQL backend with REST APIs and React/Redux Toolkit frontend
+- Implemented JWT authentication and session management; designed database schema from scratch
+- Wrote technical documentation covering API contracts and architecture decisions
+- Mentored 3 junior developers in code quality, task breakdown and feature delivery
+
+### Technical Product Owner — Lobotryasi Coffee Roasters, Jun 2020 to Jun 2022 (Moscow, Russia)
+*Subscription e-commerce platform for specialty coffee roastery.*
+- Managed end-to-end delivery of subscription platform; defined and prioritised requirements for backend (Node.js) and frontend (React) teams
+- Facilitated cross-functional collaboration between backend, frontend, design and QA in Agile workflows
+- Ran discovery with stakeholders before committing to build; translated user problems into actionable requirements
+
+---
 
 ## Education
+- Master's equivalent (5-year specialist degree), Computer Science / Mathematical Programming
+- Moscow State University of Economics, Statistics and Information (MESI), 2002 to 2007
+- GPA: 4.81 / 5.0
 
-**Moscow State University of Economics, Statistics and Information (MESI)**
-Master's degree in Computer Sciences (2002-2007) - GPA: 4.81 / 5.0
+---
 
 ## Additional
-
-- **Languages:** English (C1), Danish (A2, in progress), Russian (native)
-- **YouTube channel** (1300+ subscribers): software development, relocation to Denmark,
-  career transitions into tech
-- **Location status:** Based in Aarhus, Denmark with valid work permit
-- Married with two children; spouse is a PhD researcher at Aarhus University
+- YouTube channel on software development, AI tooling and career transitions (1,300+ subscribers)
+- Volunteer in cultural projects in Aarhus
